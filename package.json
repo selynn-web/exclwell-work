@@ -1,0 +1,9 @@
+{
+  "name": "team-archive",
+  "version": "1.0.0",
+  "private": true,
+  "description": "团队档案台 - 会议记录 / SOP / 人员 / 损毁记录 / 追踪记录 共享后台",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
