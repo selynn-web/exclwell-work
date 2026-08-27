@@ -80,7 +80,7 @@
   .nav-ext{font-size:.7rem; color:var(--ink-faint); letter-spacing:.02em;}
 
   .main{flex:1; min-width:0; padding:30px 40px 60px; max-width:1180px;}
-  .main-topbar{display:flex; justify-content:flex-end; margin-bottom:14px;}
+  .main-topbar{display:flex; justify-content:flex-end; align-items:center; gap:8px; margin-bottom:14px;}
   .save-pill{font-size:.76rem; font-weight:600; padding:4px 12px; border-radius:999px; display:inline-flex; align-items:center; gap:6px; letter-spacing:.01em;}
   .save-pill::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor;}
   .pill-neutral{background:var(--neutral-soft); color:var(--neutral);}
@@ -213,11 +213,18 @@
   .login-gate{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; padding:20px; z-index:200;}
   .login-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:var(--shadow); padding:34px 32px; width:100%; max-width:360px; text-align:center;}
   .login-title{font-size:1.3rem; font-weight:600; margin-bottom:6px;}
-  .login-sub{font-size:.84rem; color:var(--ink-dim); margin:0 0 22px;}
-  .login-input{text-align:center; letter-spacing:.08em; font-size:1.05rem; margin-bottom:14px;}
+  .login-sub{font-size:.84rem; color:var(--ink-dim); margin:0 0 22px; line-height:1.5;}
+  .login-input{text-align:left; font-size:.95rem; margin-bottom:12px;}
   .login-error{font-size:.8rem; color:var(--seal); min-height:18px; margin-bottom:8px;}
   .login-btn{width:100%;}
+  .login-toggle{margin-top:14px; background:none; border:none; color:var(--accent); font-size:.8rem; cursor:pointer; text-decoration:underline; padding:4px;}
   .app-loading{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; color:var(--ink-faint); font-size:.9rem;}
+
+  /* ---- accounts / audit ---- */
+  .current-user{font-size:.8rem; color:var(--ink-dim); font-weight:600; margin-right:10px; align-self:center;}
+  .add-teammate-form{display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
+  .add-teammate-form .input{width:auto; flex:1; min-width:140px;}
+  .card-audit{margin:0; font-size:.72rem; color:var(--ink-faint);}
 </style>
 </head>
 <body>

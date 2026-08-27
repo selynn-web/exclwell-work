@@ -2,18 +2,26 @@ const db = require("./_db");
 const auth = require("./_auth");
 
 const STATE_KEY = "team-archive:state";
-const MODULE_PREFIX = { meetings: "MTG", sops: "SOP", staff: "STF", damages: "DMG", trackers: "TRK" };
+const MODULE_PREFIX = {
+  meetings: "MTG",
+  sops: "SOP",
+  staff: "STF",
+  damages: "DMG",
+  trackers: "TRK",
+  inspections: "INS",
+  complaints: "CPL",
+  calibrations: "CAL",
+  traces: "TRC",
+};
 const VALID_MODULES = Object.keys(MODULE_PREFIX);
 
 function defaultState() {
-  return {
-    meetings: [],
-    sops: [],
-    staff: [],
-    damages: [],
-    trackers: [],
-    counters: { MTG: 0, SOP: 0, STF: 0, DMG: 0, TRK: 0 },
-  };
+  var s = { counters: {} };
+  VALID_MODULES.forEach(function (k) {
+    s[k] = [];
+    s.counters[MODULE_PREFIX[k]] = 0;
+  });
+  return s;
 }
 
 function normalize(state) {
@@ -27,7 +35,8 @@ function normalize(state) {
 }
 
 module.exports = async function handler(req, res) {
-  if (!auth.isAuthed(req)) {
+  var me = await auth.currentUser(req);
+  if (!me) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }
@@ -35,7 +44,7 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === "GET") {
       var current = normalize(await db.kvGet(STATE_KEY));
-      res.status(200).json({ state: current });
+      res.status(200).json({ state: current, user: me });
       return;
     }
 
@@ -56,6 +65,7 @@ module.exports = async function handler(req, res) {
       var state = normalize(await db.kvGet(STATE_KEY));
       var moduleKey = body.module;
       var arr = state[moduleKey];
+      var now = new Date().toISOString();
 
       if (body.op === "upsert") {
         var record = body.record;
@@ -63,22 +73,29 @@ module.exports = async function handler(req, res) {
           res.status(400).json({ error: "bad_record" });
           return;
         }
+        // Audit fields are server-authoritative — strip any client-sent
+        // values before stamping so they can't be spoofed.
+        var incoming = Object.assign({}, record);
+        delete incoming.createdBy;
+        delete incoming.createdAt;
+        delete incoming.updatedBy;
+        delete incoming.updatedAt;
+
         if (record.id && record.id !== "（保存中…）") {
           var idx = arr.findIndex(function (r) {
             return r.id === record.id;
           });
           if (idx > -1) {
-            arr[idx] = Object.assign({}, arr[idx], record);
+            arr[idx] = Object.assign({}, arr[idx], incoming, { updatedBy: me.name, updatedAt: now });
           } else {
-            arr.push(record);
+            arr.push(Object.assign({}, incoming, { createdBy: me.name, createdAt: now, updatedBy: me.name, updatedAt: now }));
           }
         } else {
           var prefix = MODULE_PREFIX[moduleKey];
           state.counters[prefix] = (state.counters[prefix] || 0) + 1;
           var newId = prefix + "-" + String(state.counters[prefix]).padStart(4, "0");
-          var clean = Object.assign({}, record);
-          delete clean.id;
-          arr.push(Object.assign({ id: newId }, clean));
+          delete incoming.id;
+          arr.push(Object.assign({}, incoming, { id: newId, createdBy: me.name, createdAt: now, updatedBy: me.name, updatedAt: now }));
         }
       } else if (body.op === "delete") {
         if (!body.id) {
@@ -94,7 +111,7 @@ module.exports = async function handler(req, res) {
       }
 
       await db.kvSet(STATE_KEY, state);
-      res.status(200).json({ state: state });
+      res.status(200).json({ state: state, user: me });
       return;
     }
 

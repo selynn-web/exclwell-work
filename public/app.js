@@ -199,14 +199,124 @@
         return lines.filter(Boolean);
       },
       emptyText:'暂无追踪事项。可以在会议记录里发现需要跟进的事，来这里新建并关联对应会议。'
+    },
+    inspections:{
+      key:"inspections", label:"检验记录", singular:"检验记录", idPrefix:"INS", titleField:"product",
+      badgeField:"inspType",
+      fields:[
+        {name:"inspType", label:"检验类型", type:"select", options:["来料检验","制程检验","成品检验"], def:"来料检验"},
+        {name:"product", label:"产品 / 物料名称", type:"text", required:true},
+        {name:"batchNo", label:"批号", type:"text"},
+        {name:"date", label:"检验日期", type:"date", required:true},
+        {name:"inspector", label:"检验员", type:"text"},
+        {name:"checkItems", label:"检验项目 / 标准", type:"textarea", full:true, placeholder:"外观 · 重量 · 水分 · 微生物指标等"},
+        {name:"result", label:"检验结果", type:"select", options:["合格","不合格","待复检"], def:"合格"},
+        {name:"nonConformNote", label:"不合格说明 / 处理方式", type:"textarea", full:true},
+        {name:"status", label:"处理状态", type:"select", options:["待处理","跟进中","已关闭"], def:"待处理"}
+      ],
+      statusColors:{"待处理":"warn","跟进中":"accent","已关闭":"good"},
+      extraBadge:function(r){
+        var color = r.result === "合格" ? "good" : (r.result === "不合格" ? "seal" : "warn");
+        return r.result ? { text:r.result, color:color } : null;
+      },
+      metaLines:function(r){
+        return [
+          [r.date, r.batchNo ? ("批号："+r.batchNo) : ""].filter(Boolean).join(" · "),
+          r.inspector ? "检验员："+r.inspector : "",
+          r.checkItems || "",
+          r.nonConformNote || ""
+        ].filter(Boolean);
+      },
+      emptyText:'暂无检验记录，点击"新建检验记录"登记来料 / 制程 / 成品检验结果。'
+    },
+    complaints:{
+      key:"complaints", label:"客户投诉记录", singular:"投诉记录", idPrefix:"CPL", titleField:"customer",
+      badgeField:"severity",
+      fields:[
+        {name:"customer", label:"客户名称", type:"text", required:true},
+        {name:"product", label:"产品 / 批号", type:"text"},
+        {name:"date", label:"投诉日期", type:"date", required:true},
+        {name:"channel", label:"投诉渠道", type:"select", options:["电话","微信 / 邮件","现场","其他"], def:"电话"},
+        {name:"description", label:"投诉内容", type:"textarea", full:true, required:true},
+        {name:"severity", label:"严重程度", type:"select", options:["轻微","一般","严重"], def:"一般"},
+        {name:"owner", label:"负责人", type:"text"},
+        {name:"handling", label:"处理措施", type:"textarea", full:true},
+        {name:"status", label:"处理状态", type:"select", options:["待处理","处理中","已完成"], def:"待处理"}
+      ],
+      statusColors:{"待处理":"warn","处理中":"accent","已完成":"good"},
+      metaLines:function(r){
+        return [
+          [r.date, r.channel].filter(Boolean).join(" · "),
+          r.product ? "产品：" +r.product : "",
+          r.description || "",
+          r.handling ? "处理："+r.handling : ""
+        ].filter(Boolean);
+      },
+      emptyText:'暂无客户投诉记录，点击"新建投诉记录"登记。'
+    },
+    calibrations:{
+      key:"calibrations", label:"设备校准记录", singular:"校准记录", idPrefix:"CAL", titleField:"equipment",
+      badgeField:"type",
+      fields:[
+        {name:"equipment", label:"设备名称", type:"text", required:true},
+        {name:"type", label:"类型", type:"select", options:["校准","保养","维修"], def:"校准"},
+        {name:"date", label:"执行日期", type:"date", required:true},
+        {name:"nextDueDate", label:"下次到期日期", type:"date"},
+        {name:"vendor", label:"执行单位 / 人员", type:"text"},
+        {name:"result", label:"结果 / 备注", type:"textarea", full:true},
+        {name:"status", label:"状态", type:"select", options:["正常","即将到期","已过期"], def:"正常"}
+      ],
+      statusColors:{"正常":"good","即将到期":"warn","已过期":"seal"},
+      extraBadge:function(r){
+        if(!r.nextDueDate) return null;
+        var due = new Date(r.nextDueDate+"T00:00:00");
+        if(isNaN(due.getTime())) return null;
+        var today = new Date(); today.setHours(0,0,0,0);
+        var days = Math.round((due-today)/86400000);
+        if(days < 0) return { text:"已逾期 "+Math.abs(days)+" 天", color:"seal" };
+        if(days <= 14) return { text:days+" 天后到期", color:"warn" };
+        return { text:days+" 天后到期", color:"good" };
+      },
+      metaLines:function(r){
+        return [
+          [r.date, r.vendor].filter(Boolean).join(" · "),
+          r.nextDueDate ? "下次到期："+r.nextDueDate : "",
+          r.result || ""
+        ].filter(Boolean);
+      },
+      emptyText:'暂无设备校准 / 保养记录，点击"新建校准记录"登记。'
+    },
+    traces:{
+      key:"traces", label:"批次追溯", singular:"追溯记录", idPrefix:"TRC", titleField:"productBatch",
+      fields:[
+        {name:"productBatch", label:"生产批号", type:"text", required:true},
+        {name:"product", label:"产品名称", type:"text", required:true},
+        {name:"productionDate", label:"生产日期", type:"date"},
+        {name:"rawBatches", label:"对应原料批号", type:"textarea", full:true, placeholder:"大豆批号 XXX · 包装材料批号 XXX 等，可逐行列出"},
+        {name:"shipBatches", label:"对应出货批号 / 客户", type:"textarea", full:true, placeholder:"出货批号、发往客户、数量等"},
+        {name:"notes", label:"备注", type:"textarea", full:true},
+        {name:"status", label:"状态", type:"select", options:["生产中","已出货","已封存"], def:"生产中"}
+      ],
+      statusColors:{"生产中":"accent","已出货":"good","已封存":"neutral"},
+      metaLines:function(r){
+        return [
+          [r.product, r.productionDate].filter(Boolean).join(" · "),
+          r.rawBatches ? "原料批号："+r.rawBatches : "",
+          r.shipBatches ? "出货批号："+r.shipBatches : ""
+        ].filter(Boolean);
+      },
+      emptyText:'暂无批次追溯记录，点击"新建追溯记录"登记原料到出货的批号对应关系。'
     }
   };
-  var NAV_ORDER = ["overview","meetings","sops","damages","trackers","staff","leaves"];
+  var NAV_ORDER = ["overview","meetings","sops","inspections","complaints","calibrations","traces","damages","trackers","staff","leaves","accounts"];
   var LEAVE_APP_URL = "https://exclwell-leave-app.vercel.app/";
   var EXTERNAL_VIEWS = {
     leaves: { label:"请假管理", url: LEAVE_APP_URL, title:"请假申请已迁移至独立系统",
       desc:"团队的请假申请、审批与记录统一在 exclwell 请假系统处理。点击下方按钮，在新标签页打开该系统提交或查看申请。",
       cta:"打开请假申请系统 ↗" }
+  };
+  var INTERNAL_VIEWS = {
+    accounts: { label:"账号管理" }
   };
 
   var STATE = null, UI = null;
@@ -215,12 +325,22 @@
   var toastTimer = null;
   var pollTimer = null;
   var MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+  var CURRENT_USER = null;
+  var ACCOUNTS = { list:null, loading:false, error:null };
 
   function defaultState(){
-    return { meetings:[], sops:[], staff:[], damages:[], trackers:[], counters:{MTG:0,SOP:0,STF:0,DMG:0,TRK:0} };
+    return {
+      meetings:[], sops:[], staff:[], damages:[], trackers:[],
+      inspections:[], complaints:[], calibrations:[], traces:[],
+      counters:{MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0}
+    };
   }
   function defaultUI(){
-    return { view:"overview", search:{meetings:"",sops:"",staff:"",damages:"",trackers:""}, modal:null, confirmDelete:null };
+    return {
+      view:"overview",
+      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:""},
+      modal:null, confirmDelete:null
+    };
   }
   function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
   function esc(s){
@@ -420,15 +540,16 @@
     var items = NAV_ORDER.map(function(key){
       var isOverview = key === "overview";
       var isExternal = !!EXTERNAL_VIEWS[key];
-      var label = isOverview ? "总览" : (isExternal ? EXTERNAL_VIEWS[key].label : MODULES[key].label);
-      var count = (isOverview || isExternal) ? null : STATE[key].length;
+      var isInternal = !!INTERNAL_VIEWS[key];
+      var label = isOverview ? "总览" : (isExternal ? EXTERNAL_VIEWS[key].label : (isInternal ? INTERNAL_VIEWS[key].label : MODULES[key].label));
+      var count = (isOverview || isExternal || isInternal) ? null : STATE[key].length;
       var active = UI.view === key;
       return '<button class="nav-item '+(active?"nav-item-active":"")+'" onclick="app.setView(\''+key+'\')">'
         + '<span class="nav-label">'+esc(label)+'</span>'
         + (count!==null ? '<span class="nav-count num">'+count+'</span>' : (isExternal ? '<span class="nav-ext">外部 ↗</span>' : ''))
         + '</button>';
     }).join("");
-    return '<div class="brand">团队档案台<span class="brand-sub">会议 · SOP · 人员 · 请假</span></div><nav class="nav">'+items+'</nav>';
+    return '<div class="brand">团队档案台<span class="brand-sub">会议 · SOP · 品质 · 人员</span></div><nav class="nav">'+items+'</nav>';
   }
 
   function renderSaveStatus(){
@@ -440,7 +561,21 @@
     };
     var key = transientStatus || mode;
     var s = map[key] || map.connecting;
-    return '<span class="save-pill '+s.cls+'">'+s.text+'</span>';
+    var userHtml = CURRENT_USER ? '<span class="current-user">'+esc(CURRENT_USER.name)+'</span><button type="button" class="btn btn-ghost btn-sm" onclick="app.logout()">退出登录</button>' : '';
+    return userHtml + '<span class="save-pill '+s.cls+'">'+s.text+'</span>';
+  }
+
+  function logout(){
+    fetch("/api/logout", { method:"POST" }).then(function(){
+      CURRENT_USER = null;
+      STATE = null;
+      if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+      LOGIN_MODE = "login";
+      showLogin();
+    }).catch(function(){
+      CURRENT_USER = null;
+      showLogin();
+    });
   }
 
   function renderBanner(){
@@ -558,10 +693,15 @@
     var extraActionsHtml = extraActions.map(function(a){
       return '<button class="btn btn-ghost btn-sm" onclick="'+a.onclick+'">'+esc(a.label)+'</button>';
     }).join("");
+    var auditBits = [];
+    if(r.createdBy) auditBits.push("创建："+r.createdBy);
+    if(r.updatedBy && r.updatedBy !== r.createdBy) auditBits.push("最近修改："+r.updatedBy);
+    var auditHtml = auditBits.length ? '<p class="card-audit">'+esc(auditBits.join(" · "))+'</p>' : '';
     return '<div class="card" style="--card-color:var(--'+colorKey+')">'
       + '<div class="card-top"><span class="card-id num">'+esc(r.id)+'</span><div class="card-top-chips">'+badge+extraChip+secondaryChip+'<span class="chip chip-'+colorKey+'">'+esc(r.status||"")+'</span></div></div>'
       + '<h3 class="card-title">'+esc(r[mod.titleField] || "(未命名)")+'</h3>'
       + '<div class="card-meta">' + mod.metaLines(r).map(function(l){ return '<p>'+esc(l)+'</p>'; }).join("") + '</div>'
+      + auditHtml
       + docLinkHtml
       + attachHtml
       + '<div class="card-actions">'
@@ -657,12 +797,26 @@
 
   function renderOverview(){
     var m = STATE.meetings, s = STATE.sops, st = STATE.staff, d = STATE.damages, t = STATE.trackers;
+    var insp = STATE.inspections, cpl = STATE.complaints, cal = STATE.calibrations, trc = STATE.traces;
     var dPending = d.filter(function(x){ return x.status === "待处理"; });
     var tOpen = t.filter(function(x){ return x.status !== "已完成"; });
     var tOverdue = t.filter(function(x){ return x.status === "已延误"; });
+    var inspFail = insp.filter(function(x){ return x.result === "不合格"; });
+    var cplPending = cpl.filter(function(x){ return x.status !== "已完成"; });
+    var today = new Date(); today.setHours(0,0,0,0);
+    var calDue = cal.filter(function(x){
+      if(!x.nextDueDate) return false;
+      var due = new Date(x.nextDueDate+"T00:00:00");
+      if(isNaN(due.getTime())) return false;
+      return Math.round((due-today)/86400000) <= 14;
+    });
     var cards = [
       {label:"会议记录", big:m.length, sub: m.length ? statusBreakdown(m,["进行中","已完成","待跟进"]) : "尚无记录"},
       {label:"SOP 文档", big:s.length, sub: s.length ? statusBreakdown(s,["启用","草稿","停用"]) : "尚无记录"},
+      {label:"检验记录", big: inspFail.length, sub: "共 "+insp.length+" 条 · 不合格 "+inspFail.length, highlight: inspFail.length>0},
+      {label:"客户投诉", big: cplPending.length, sub: "共 "+cpl.length+" 条 · 待处理 "+cplPending.length, highlight: cplPending.length>0},
+      {label:"设备校准", big: calDue.length, sub: "共 "+cal.length+" 条 · 即将/已到期 "+calDue.length, highlight: calDue.length>0},
+      {label:"批次追溯", big: trc.length, sub: "共 "+trc.length+" 条记录"},
       {label:"产品损毁记录", big: dPending.length, sub: "共 "+d.length+" 条记录", highlight: dPending.length>0},
       {label:"追踪记录", big: tOpen.length, sub: tOverdue.length ? ("共 "+t.length+" 条 · 已延误 "+tOverdue.length) : ("共 "+t.length+" 条"), highlight: tOverdue.length>0},
       {label:"在职人员", big: st.filter(function(x){return x.status==="在职";}).length, sub: "共 "+st.length+" 人"},
@@ -682,9 +836,119 @@
       + '</div>';
   }
 
+  function fetchAccounts(){
+    ACCOUNTS.loading = true;
+    ACCOUNTS.error = null;
+    render();
+    fetch("/api/users").then(function(res){
+      if(res.status === 401){ showLogin("登录已过期，请重新输入密码。"); throw new Error("__unauthorized__"); }
+      if(!res.ok) throw new Error("load_failed");
+      return res.json();
+    }).then(function(json){
+      ACCOUNTS.list = json.users || [];
+      ACCOUNTS.loading = false;
+      render();
+    }).catch(function(err){
+      if(err && err.message === "__unauthorized__") return;
+      ACCOUNTS.loading = false;
+      ACCOUNTS.error = "加载失败，请重试";
+      render();
+    });
+  }
+
+  function renderAccountsView(){
+    var wd = writeDisabled();
+    var rows;
+    if(ACCOUNTS.loading && !ACCOUNTS.list){
+      rows = '<div class="empty-state">加载中…</div>';
+    } else if(ACCOUNTS.error){
+      rows = '<div class="empty-state">'+esc(ACCOUNTS.error)+'</div>';
+    } else if(!ACCOUNTS.list || !ACCOUNTS.list.length){
+      rows = '<div class="empty-state">还没有团队成员账号。</div>';
+    } else {
+      rows = '<div class="card-grid">' + ACCOUNTS.list.map(function(u){
+        var isMe = CURRENT_USER && CURRENT_USER.id === u.id;
+        return '<div class="card">'
+          + '<div class="card-top"><span class="card-id num">@'+esc(u.username)+'</span>'+(isMe?'<span class="chip chip-accent">我</span>':'')+'</div>'
+          + '<h3 class="card-title">'+esc(u.name)+'</h3>'
+          + '<div class="card-meta"><p>'+(u.createdAt?("加入时间："+esc(u.createdAt.slice(0,10))):"")+'</p></div>'
+          + '<div class="card-actions">'
+          + '<button class="btn btn-danger btn-sm" onclick="app.removeTeammate(\''+u.id+'\',\''+esc(u.name)+'\')" '+wd+'>移除账号</button>'
+          + '</div></div>';
+      }).join("") + '</div>';
+    }
+    return '<div class="view-header"><h2 class="view-title">账号管理</h2></div>'
+      + '<div class="panel" style="margin-bottom:18px;">'
+      + '<h3 class="panel-title">添加团队成员</h3>'
+      + '<p class="external-desc">需要团队邀请码（跟登录页"没有账号"用的是同一个），新成员自己在登录页设置账号也可以，不一定要你来加。</p>'
+      + '<form id="add-teammate-form" class="add-teammate-form" onsubmit="app.addTeammate(event)">'
+      + '<input class="input" type="password" name="teamPin" placeholder="团队邀请码" autocomplete="off">'
+      + '<input class="input" type="text" name="name" placeholder="姓名">'
+      + '<input class="input" type="text" name="username" placeholder="用户名">'
+      + '<input class="input" type="password" name="password" placeholder="初始密码（至少 4 位）" autocomplete="new-password">'
+      + '<button type="submit" class="btn btn-primary" '+wd+'>添加</button>'
+      + '</form>'
+      + '</div>'
+      + rows;
+  }
+
+  function addTeammate(e){
+    e.preventDefault();
+    var form = e.target;
+    var payload = {
+      op:"add",
+      teamPin: form.elements["teamPin"].value,
+      name: form.elements["name"].value,
+      username: form.elements["username"].value,
+      password: form.elements["password"].value
+    };
+    var btn = form.querySelector('button[type="submit"]');
+    if(btn) btn.disabled = true;
+    fetch("/api/users", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    }).then(function(res){
+      if(res.status === 401 && !form.elements["teamPin"].value){ showLogin("登录已过期，请重新输入密码。"); throw new Error("__unauthorized__"); }
+      return res.json().catch(function(){ return {}; }).then(function(json){
+        if(!res.ok) throw new Error(json.message || "添加失败，请检查邀请码是否正确");
+        return json;
+      });
+    }).then(function(){
+      toast("已添加团队成员");
+      form.reset();
+      if(btn) btn.disabled = false;
+      fetchAccounts();
+    }).catch(function(err){
+      if(err && err.message === "__unauthorized__") return;
+      toast(err.message || "添加失败，请重试");
+      if(btn) btn.disabled = false;
+    });
+  }
+
+  function removeTeammate(id, name){
+    if(!window.confirm('确定要移除 "'+name+'" 的账号吗？此操作无法撤销，对方将无法再登录（已保存的记录不受影响）。')) return;
+    fetch("/api/users", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({op:"remove", id:id})
+    }).then(function(res){
+      if(res.status === 401){ showLogin("登录已过期，请重新输入密码。"); throw new Error("__unauthorized__"); }
+      if(!res.ok) throw new Error("remove_failed");
+      return res.json();
+    }).then(function(){
+      toast("已移除账号");
+      fetchAccounts();
+    }).catch(function(err){
+      if(err && err.message === "__unauthorized__") return;
+      toast("移除失败，请重试");
+    });
+  }
+
   function render(){
     var root = document.getElementById("app-root");
     var body = UI.view === "overview" ? renderOverview()
+      : UI.view === "accounts" ? renderAccountsView()
       : EXTERNAL_VIEWS[UI.view] ? renderExternalEntry(UI.view)
       : renderModuleView(UI.view);
     root.innerHTML = '<div class="app-shell">'
@@ -699,7 +963,11 @@
 
   /* ---------- actions ---------- */
 
-  function setView(key){ UI.view = key; UI.modal = null; UI.confirmDelete = null; render(); }
+  function setView(key){
+    UI.view = key; UI.modal = null; UI.confirmDelete = null;
+    render();
+    if(key === "accounts") fetchAccounts();
+  }
   function setSearch(moduleKey, value){ UI.search[moduleKey] = value; render(); }
   function openModal(moduleKey, id, draft){ UI.modal = {module:moduleKey, id: id || null, draft: draft || null}; render(); }
 
@@ -775,9 +1043,10 @@
 
   function applyServerState(state){
     STATE = state;
-    if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0};
-    if(!STATE.damages) STATE.damages = [];
-    if(!STATE.trackers) STATE.trackers = [];
+    if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0};
+    ["meetings","sops","staff","damages","trackers","inspections","complaints","calibrations","traces"].forEach(function(k){
+      if(!STATE[k]) STATE[k] = [];
+    });
   }
 
   function setTransient(status){
@@ -826,48 +1095,103 @@
     fetchState().then(function(json){
       if(!json) return;
       applyServerState(json.state);
+      if(json.user) CURRENT_USER = json.user;
       render();
     }).catch(function(){});
   }
 
   /* ---------- login gate ---------- */
 
+  var LOGIN_MODE = "login"; // "login" | "join"
+
   function renderLogin(msg){
     document.getElementById("app-root").innerHTML = "";
     var root = document.getElementById("login-root");
-    root.innerHTML = '<div class="login-gate"><div class="login-card">'
-      + '<h2 class="login-title">团队档案台</h2>'
-      + '<p class="login-sub">请输入团队共用密码进入</p>'
-      + '<form id="login-form" onsubmit="app.submitLogin(event)">'
-      + '<input class="input login-input" type="password" name="pin" placeholder="团队密码" autofocus>'
-      + '<p class="login-error">'+esc(msg||"")+'</p>'
-      + '<button type="submit" class="btn btn-primary login-btn">进入</button>'
-      + '</form></div></div>';
-    var input = root.querySelector('input[name="pin"]');
+    if(LOGIN_MODE === "join"){
+      root.innerHTML = '<div class="login-gate"><div class="login-card">'
+        + '<h2 class="login-title">团队档案台</h2>'
+        + '<p class="login-sub">用团队邀请码设置你的账号——首次使用、忘记密码、新成员加入都用这个</p>'
+        + '<form id="login-form" onsubmit="app.submitJoin(event)">'
+        + '<input class="input login-input" type="password" name="teamPin" placeholder="团队邀请码" autofocus autocomplete="off">'
+        + '<input class="input login-input" type="text" name="name" placeholder="你的姓名" autocomplete="name">'
+        + '<input class="input login-input" type="text" name="username" placeholder="用户名（登录用，如拼音）" autocomplete="username">'
+        + '<input class="input login-input" type="password" name="password" placeholder="设置密码（至少 4 位）" autocomplete="new-password">'
+        + '<p class="login-error">'+esc(msg||"")+'</p>'
+        + '<button type="submit" class="btn btn-primary login-btn">设置并进入</button>'
+        + '</form>'
+        + '<button type="button" class="login-toggle" onclick="app.toggleLoginMode()">已经有账号？点此登录</button>'
+        + '</div></div>';
+    } else {
+      root.innerHTML = '<div class="login-gate"><div class="login-card">'
+        + '<h2 class="login-title">团队档案台</h2>'
+        + '<p class="login-sub">用你自己的账号登录</p>'
+        + '<form id="login-form" onsubmit="app.submitLogin(event)">'
+        + '<input class="input login-input" type="text" name="username" placeholder="用户名" autocomplete="username" autofocus>'
+        + '<input class="input login-input" type="password" name="password" placeholder="密码" autocomplete="current-password">'
+        + '<p class="login-error">'+esc(msg||"")+'</p>'
+        + '<button type="submit" class="btn btn-primary login-btn">登录</button>'
+        + '</form>'
+        + '<button type="button" class="login-toggle" onclick="app.toggleLoginMode()">没有账号 / 忘记密码 / 新成员加入</button>'
+        + '</div></div>';
+    }
+    var input = root.querySelector('.login-input');
     if(input) input.focus();
   }
 
   function showLogin(msg){ mode = "connecting"; renderLogin(msg); }
   function hideLogin(){ document.getElementById("login-root").innerHTML = ""; }
+  function toggleLoginMode(){ LOGIN_MODE = LOGIN_MODE === "login" ? "join" : "login"; renderLogin(); }
 
   function submitLogin(e){
     e.preventDefault();
     var form = e.target;
-    var pin = form.elements["pin"].value;
+    var username = form.elements["username"].value;
+    var password = form.elements["password"].value;
     var btn = form.querySelector('button[type="submit"]');
     if(btn) btn.disabled = true;
     fetch("/api/login", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({pin:pin})
+      body: JSON.stringify({username:username, password:password})
     }).then(function(res){
-      if(!res.ok){ throw new Error(res.status === 401 ? "密码错误，请重试" : "登录失败，请重试"); }
-      return res.json();
+      return res.json().catch(function(){ return {}; }).then(function(json){
+        if(!res.ok) throw new Error(json.message || (res.status === 401 ? "用户名或密码不对，请重试" : "登录失败，请重试"));
+        return json;
+      });
     }).then(function(){
       hideLogin();
       boot();
     }).catch(function(err){
       renderLogin(err.message || "登录失败，请重试");
+    });
+  }
+
+  function submitJoin(e){
+    e.preventDefault();
+    var form = e.target;
+    var payload = {
+      mode:"join",
+      teamPin: form.elements["teamPin"].value,
+      name: form.elements["name"].value,
+      username: form.elements["username"].value,
+      password: form.elements["password"].value
+    };
+    var btn = form.querySelector('button[type="submit"]');
+    if(btn) btn.disabled = true;
+    fetch("/api/login", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    }).then(function(res){
+      return res.json().catch(function(){ return {}; }).then(function(json){
+        if(!res.ok) throw new Error(json.message || (res.status === 401 ? "团队邀请码不对，请找管理员确认" : "设置失败，请重试"));
+        return json;
+      });
+    }).then(function(){
+      hideLogin();
+      boot();
+    }).catch(function(err){
+      renderLogin(err.message || "设置失败，请重试");
     });
   }
 
@@ -883,6 +1207,7 @@
         return;
       }
       applyServerState(json.state);
+      if(json.user) CURRENT_USER = json.user;
       mode = "writer";
       render();
       if(pollTimer) clearInterval(pollTimer);
@@ -897,8 +1222,10 @@
     requestDelete: requestDelete, cancelDelete: cancelDelete, confirmDeleteNow: confirmDeleteNow,
     submitForm: submitForm, onMeetingTypeChange: onMeetingTypeChange,
     handleFileSelect: handleFileSelect, removeAttachment: removeAttachment, downloadAttachment: downloadAttachment,
-    submitLogin: submitLogin, createTrackerFromFlag: createTrackerFromFlag,
-    addReportItem: addReportItem, removeReportItem: removeReportItem, syncReportItems: syncReportItems
+    submitLogin: submitLogin, submitJoin: submitJoin, toggleLoginMode: toggleLoginMode, logout: logout,
+    createTrackerFromFlag: createTrackerFromFlag,
+    addReportItem: addReportItem, removeReportItem: removeReportItem, syncReportItems: syncReportItems,
+    addTeammate: addTeammate, removeTeammate: removeTeammate
   };
 
   if(document.readyState === "loading"){
