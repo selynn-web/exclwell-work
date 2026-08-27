@@ -285,6 +285,12 @@
     "移除": {en:"Remove", ms:"Buang"},
     "未上传附件": {en:"No attachment uploaded", ms:"Tiada lampiran dimuat naik"},
 
+    // document export
+    "导出": {en:"Export", ms:"Eksport"},
+    "导出全部": {en:"Export All", ms:"Eksport Semua"},
+    "找不到记录": {en:"Record not found", ms:"Rekod tidak dijumpai"},
+    "没有可导出的记录": {en:"No records to export", ms:"Tiada rekod untuk dieksport"},
+
     // toasts / errors
     "文件太大，附件请控制在 4MB 以内": {en:"File too large. Please keep attachments under 4MB.", ms:"Fail terlalu besar. Sila pastikan lampiran di bawah 4MB."},
     "文件读取失败，请重试": {en:"Failed to read file, please retry", ms:"Gagal membaca fail, sila cuba lagi"},
@@ -864,6 +870,124 @@
     }
   }
 
+  /* ---------- document export (Word) ----------
+     Zero-dependency approach: build an HTML document and hand it to the
+     browser as a Blob typed application/msword. Word (and Google Docs /
+     Pages) opens this as a normal document — no library, no server call,
+     no new npm dependency, consistent with the rest of this project. */
+
+  function safeFilename(s){
+    /* Some Chromium builds silently fall back to a generic "download" name
+       when the <a download="..."> attribute contains ANY non-ASCII
+       character (confirmed even with a single accented Latin letter, not
+       just CJK) — so the on-disk filename must stay plain ASCII. This does
+       not affect the document's actual title/content, which is still fully
+       translated inside the file. */
+    return String(s || "file")
+      .replace(/[\\/:*?"<>|]+/g, "_")
+      .replace(/\s+/g, "_")
+      .replace(/[^\x20-\x7E]+/g, "")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80) || "file";
+  }
+
+  function nl2br(s){
+    return esc(s).replace(/\r\n|\r|\n/g, "<br>");
+  }
+
+  function wrapWordHtml(title, bodyHtml){
+    return "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>"
+      + "<head><meta charset='utf-8'><title>"+esc(title)+"</title>"
+      + "<style>body{font-family:Calibri,Arial,sans-serif; font-size:11pt; color:#222;} table{border-collapse:collapse; width:100%;} td{border:1px solid #ccc; padding:6px 10px; vertical-align:top;} .doc-label{font-weight:bold; width:190px;}</style>"
+      + "</head><body>" + bodyHtml + "</body></html>";
+  }
+
+  function downloadWordDoc(filename, html){
+    var blob = new Blob(["\ufeff", html], { type: "application/msword" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  }
+
+  function recordDocTitle(mod, r){
+    var singularT = T(mod.singular);
+    return singularT + " " + r.id + (r[mod.titleField] ? (" - " + r[mod.titleField]) : "");
+  }
+
+  function docFieldRows(mod, record){
+    var rows = "";
+    mod.fields.forEach(function(f){
+      if(f.showIf && !f.showIf(record)) return;
+      if(f.type === "hidden") return;
+      if(f.type === "heading"){
+        rows += '<tr><td colspan="2" style="font-weight:bold; font-size:13pt; border:none; padding-top:16px;">'+esc(T(f.text))+'</td></tr>';
+        return;
+      }
+      if(f.type === "itemlist"){
+        var items = itemsWithText(record[f.targetField]);
+        if(!items.length) return;
+        var listHtml = items.map(function(it, idx){
+          return (idx+1)+". "+nl2br(it.text)+(it.track ? " <b>["+esc(T("需要追踪"))+"]</b>" : "");
+        }).join("<br>");
+        rows += '<tr><td class="doc-label">'+esc(fieldLabel(f, record))+'</td><td>'+listHtml+'</td></tr>';
+        return;
+      }
+      if(f.type === "file"){
+        var raw = record[f.targetField];
+        if(!raw) return;
+        var att; try{ att = JSON.parse(raw); }catch(e){ att = null; }
+        if(!att) return;
+        rows += '<tr><td class="doc-label">'+esc(fieldLabel(f, record))+'</td><td>'+esc(att.name)+'</td></tr>';
+        return;
+      }
+      var val = record[f.name];
+      if(val == null || val === "") return;
+      var displayVal = f.type === "select" ? esc(T(val)) : nl2br(val);
+      rows += '<tr><td class="doc-label">'+esc(fieldLabel(f, record))+'</td><td>'+displayVal+'</td></tr>';
+    });
+    return rows;
+  }
+
+  function docAuditLine(r){
+    var bits = [];
+    if(r.createdBy) bits.push(T("创建：")+r.createdBy+(r.createdAt?(" ("+r.createdAt.slice(0,10)+")"):""));
+    if(r.updatedBy && r.updatedBy !== r.createdBy) bits.push(T("最近修改：")+r.updatedBy+(r.updatedAt?(" ("+r.updatedAt.slice(0,10)+")"):""));
+    return bits.length ? '<p style="color:#666; font-size:9pt;">'+esc(bits.join(" · "))+'</p>' : "";
+  }
+
+  function exportRecord(moduleKey, id){
+    var mod = MODULES[moduleKey];
+    var r = (STATE[moduleKey]||[]).find(function(x){ return x.id === id; });
+    if(!r){ toast(T("找不到记录")); return; }
+    var title = recordDocTitle(mod, r);
+    var bodyHtml = '<h1 style="font-size:18pt; margin-bottom:2px;">'+esc(title)+'</h1>'
+      + docAuditLine(r)
+      + '<table style="margin-top:10px;"><tbody>' + docFieldRows(mod, r) + '</tbody></table>';
+    downloadWordDoc(safeFilename(moduleKey+"_"+r.id)+".doc", wrapWordHtml(title, bodyHtml));
+  }
+
+  function exportModule(moduleKey){
+    var mod = MODULES[moduleKey];
+    var list = getFiltered(moduleKey).slice().reverse();
+    if(!list.length){ toast(T("没有可导出的记录")); return; }
+    var modLabel = T(mod.label);
+    var title = modLabel + " " + T3("全部记录导出", "Full Export", "Eksport Penuh");
+    var sections = list.map(function(r){
+      return '<h2 style="font-size:14pt; margin-top:26px; border-top:2px solid #333; padding-top:14px;">'+esc(recordDocTitle(mod, r))+'</h2>'
+        + docAuditLine(r)
+        + '<table style="margin-top:6px;"><tbody>' + docFieldRows(mod, r) + '</tbody></table>';
+    }).join("");
+    var countLine = '<p style="color:#666; font-size:9pt;">'+esc(T3("共 ","Total ","Jumlah "))+list.length+esc(T3(" 条记录"," records"," rekod"))+'</p>';
+    var bodyHtml = '<h1 style="font-size:18pt;">'+esc(title)+'</h1>' + countLine + sections;
+    downloadWordDoc(safeFilename(moduleKey+"_export")+".doc", wrapWordHtml(title, bodyHtml));
+  }
+
   function renderItemRow(item){
     var id = (item && item.id) || newItemId();
     var text = (item && item.text) || "";
@@ -1118,6 +1242,7 @@
       + attachHtml
       + '<div class="card-actions">'
       + extraActionsHtml
+      + '<button class="btn btn-ghost btn-sm" onclick="app.exportRecord(\''+mod.key+'\',\''+r.id+'\')">'+esc(T("导出"))+'</button>'
       + '<button class="btn btn-ghost btn-sm" onclick="app.openModal(\''+mod.key+'\',\''+r.id+'\')" '+wd+'>'+esc(T("编辑"))+'</button>'
       + '<button class="btn btn-danger btn-sm" onclick="app.requestDelete(\''+mod.key+'\',\''+r.id+'\')" '+wd+'>'+esc(T("删除"))+'</button>'
       + '</div></div>';
@@ -1187,6 +1312,7 @@
       + '<h2 class="view-title">'+esc(modLabel)+' <span class="view-count num">'+STATE[moduleKey].length+'</span></h2>'
       + '<div class="view-tools">'
       + '<input class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search[moduleKey]||"")+'" oninput="app.setSearch(\''+moduleKey+'\', this.value)">'
+      + '<button class="btn btn-ghost" onclick="app.exportModule(\''+moduleKey+'\')">'+esc(T("导出全部"))+'</button>'
       + '<button class="btn btn-primary" onclick="app.openModal(\''+moduleKey+'\', null)" '+wd+'>'+esc(newBtnLabel)+'</button>'
       + '</div></div>'
       + (moduleKey === "trackers" ? renderFlaggedPanel() : "")
@@ -1715,7 +1841,8 @@
     addReportItem: addReportItem, removeReportItem: removeReportItem, syncReportItems: syncReportItems,
     addTeammate: addTeammate, removeTeammate: removeTeammate,
     togglePermEdit: togglePermEdit, savePermissions: savePermissions,
-    setLang: setLang
+    setLang: setLang,
+    exportRecord: exportRecord, exportModule: exportModule
   };
 
   if(document.readyState === "loading"){
