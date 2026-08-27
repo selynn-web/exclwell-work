@@ -5,10 +5,28 @@ function genId() {
   return "u-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+// Accepts whatever the client sent for "which modules can this account
+// see" and turns it into either null (full access — the default) or a
+// clean array of known module keys.
+function sanitizeAllowedModules(input) {
+  if (!Array.isArray(input)) return null;
+  var clean = input.filter(function (k) { return auth.RESTRICTABLE_MODULES.indexOf(k) > -1; });
+  var unique = clean.filter(function (k, i) { return clean.indexOf(k) === i; });
+  return unique;
+}
+
+function forbid(res, message) {
+  res.status(403).json({ error: "forbidden", message: message || "你的账号没有账号管理的权限" });
+}
+
 module.exports = async function handler(req, res) {
   var me = await auth.currentUser(req);
   if (!me) {
     res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  if (!auth.canAccess(me, "accounts")) {
+    forbid(res);
     return;
   }
 
@@ -16,8 +34,16 @@ module.exports = async function handler(req, res) {
     var users = await auth.getUsers();
     var list = users
       .filter(function (u) { return !u.deleted; })
-      .map(function (u) { return { id: u.id, name: u.name, username: u.username, createdAt: u.createdAt }; });
-    res.status(200).json({ users: list, me: me });
+      .map(function (u) {
+        return {
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          createdAt: u.createdAt,
+          allowedModules: Array.isArray(u.allowedModules) ? u.allowedModules : null,
+        };
+      });
+    res.status(200).json({ users: list, me: me, restrictableModules: auth.RESTRICTABLE_MODULES });
     return;
   }
 
@@ -46,32 +72,76 @@ module.exports = async function handler(req, res) {
           res.status(400).json({ error: "bad_request", message: "请填写姓名、用户名，密码至少 4 位" });
           return;
         }
-        var users2 = await auth.getUsers();
-        if (users2.some(function (u) { return u.username === username && !u.deleted; })) {
-          res.status(400).json({ error: "username_taken", message: "这个用户名已经有人用了，换一个试试" });
+        var allowedModules = sanitizeAllowedModules(body.allowedModules);
+        var passwordHash = auth.hashPassword(password);
+        try {
+          await db.kvUpdate(auth.USERS_KEY, function (raw) {
+            var users = Array.isArray(raw) ? raw.slice() : [];
+            if (users.some(function (u) { return u.username === username && !u.deleted; })) {
+              var err = new Error("username_taken");
+              err.httpStatus = 400;
+              err.httpBody = { error: "username_taken", message: "这个用户名已经有人用了，换一个试试" };
+              throw err;
+            }
+            users.push({
+              id: genId(),
+              name: name,
+              username: username,
+              passwordHash: passwordHash,
+              allowedModules: allowedModules,
+              createdAt: new Date().toISOString(),
+            });
+            return { value: users };
+          });
+        } catch (err) {
+          if (err && err.httpStatus) { res.status(err.httpStatus).json(err.httpBody); return; }
+          throw err;
+        }
+        res.status(200).json({ ok: true });
+        return;
+      }
+
+      if (body.op === "setPermissions") {
+        if (!body.id) {
+          res.status(400).json({ error: "bad_request" });
           return;
         }
-        users2.push({
-          id: genId(),
-          name: name,
-          username: username,
-          passwordHash: auth.hashPassword(password),
-          createdAt: new Date().toISOString(),
+        var nextAllowed = sanitizeAllowedModules(body.allowedModules);
+        // Guard against locking yourself out of account management —
+        // nobody else could undo it for you without direct DB access.
+        if (body.id === me.id && Array.isArray(nextAllowed) && nextAllowed.indexOf("accounts") === -1) {
+          res.status(400).json({ error: "bad_request", message: "不能取消自己的账号管理权限，请让其他同事帮你调整" });
+          return;
+        }
+        var permResult = await db.kvUpdate(auth.USERS_KEY, function (raw) {
+          var users = Array.isArray(raw) ? raw.slice() : [];
+          var idx = users.findIndex(function (u) { return u.id === body.id && !u.deleted; });
+          if (idx === -1) return { value: users, found: false };
+          var next = users.slice();
+          next[idx] = Object.assign({}, next[idx], { allowedModules: nextAllowed });
+          return { value: next, found: true };
         });
-        await db.kvSet(auth.USERS_KEY, users2);
+        if (!permResult.found) {
+          res.status(404).json({ error: "not_found" });
+          return;
+        }
         res.status(200).json({ ok: true });
         return;
       }
 
       if (body.op === "remove") {
-        var users3 = await auth.getUsers();
-        var target = users3.find(function (u) { return u.id === body.id; });
-        if (!target) {
+        var removeResult = await db.kvUpdate(auth.USERS_KEY, function (raw) {
+          var users = Array.isArray(raw) ? raw.slice() : [];
+          var idx = users.findIndex(function (u) { return u.id === body.id; });
+          if (idx === -1) return { value: users, found: false };
+          var next = users.slice();
+          next[idx] = Object.assign({}, next[idx], { deleted: true });
+          return { value: next, found: true };
+        });
+        if (!removeResult.found) {
           res.status(404).json({ error: "not_found" });
           return;
         }
-        target.deleted = true;
-        await db.kvSet(auth.USERS_KEY, users3);
         res.status(200).json({ ok: true });
         return;
       }

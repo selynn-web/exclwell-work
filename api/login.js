@@ -50,25 +50,31 @@ module.exports = async function handler(req, res) {
         res.status(400).json({ error: "bad_request", message: "请填写姓名、用户名，密码至少 4 位" });
         return;
       }
-      var users = await auth.getUsers();
-      var existing = users.find(function (u) { return u.username === username && !u.deleted; });
-      var uid;
-      if (existing) {
-        existing.passwordHash = auth.hashPassword(password);
-        existing.name = name;
-        uid = existing.id;
-      } else {
-        uid = genId();
-        users.push({
-          id: uid,
-          name: name,
-          username: username,
-          passwordHash: auth.hashPassword(password),
-          createdAt: new Date().toISOString(),
-        });
-      }
-      await db.kvSet(auth.USERS_KEY, users);
-      setSessionCookie(res, uid);
+      // Optimistic-concurrency update: if someone else's account change
+      // (another join, or an admin add/remove) saves in between our read
+      // and write, retry against the fresh list instead of clobbering it.
+      var passwordHash = auth.hashPassword(password);
+      var joinResult = await db.kvUpdate(auth.USERS_KEY, function (raw) {
+        var users = Array.isArray(raw) ? raw.slice() : [];
+        var existing = users.find(function (u) { return u.username === username && !u.deleted; });
+        var uid;
+        if (existing) {
+          var idx = users.indexOf(existing);
+          users[idx] = Object.assign({}, existing, { passwordHash: passwordHash, name: name });
+          uid = existing.id;
+        } else {
+          uid = genId();
+          users.push({
+            id: uid,
+            name: name,
+            username: username,
+            passwordHash: passwordHash,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        return { value: users, uid: uid };
+      });
+      setSessionCookie(res, joinResult.uid);
       res.status(200).json({ ok: true, name: name });
       return;
     }

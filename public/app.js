@@ -318,6 +318,24 @@
   var INTERNAL_VIEWS = {
     accounts: { label:"账号管理" }
   };
+  // Modules an account can be restricted to a subset of — mirrors
+  // api/_auth.js's RESTRICTABLE_MODULES. "overview" and "leaves" are
+  // never restricted.
+  var RESTRICTABLE_MODULES = ["meetings","sops","inspections","complaints","calibrations","traces","damages","trackers","staff","accounts"];
+  function moduleLabel(key){
+    if(MODULES[key]) return MODULES[key].label;
+    if(INTERNAL_VIEWS[key]) return INTERNAL_VIEWS[key].label;
+    return key;
+  }
+  function isModuleAllowed(key){
+    // "overview" and "leaves" are never restrictable (see RESTRICTABLE_MODULES
+    // above) — they're never offered as checkboxes, so they'd never appear in
+    // an account's allowedModules array. Without this check they'd wrongly
+    // look "not allowed" for every restricted account and vanish from the nav.
+    if(RESTRICTABLE_MODULES.indexOf(key) === -1) return true;
+    if(!CURRENT_USER || !Array.isArray(CURRENT_USER.allowedModules)) return true;
+    return CURRENT_USER.allowedModules.indexOf(key) > -1;
+  }
 
   var STATE = null, UI = null;
   var mode = "connecting"; // connecting | writer
@@ -326,7 +344,7 @@
   var pollTimer = null;
   var MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
   var CURRENT_USER = null;
-  var ACCOUNTS = { list:null, loading:false, error:null };
+  var ACCOUNTS = { list:null, loading:false, error:null, editingId:null };
 
   function defaultState(){
     return {
@@ -537,7 +555,7 @@
   }
 
   function renderSidebar(){
-    var items = NAV_ORDER.map(function(key){
+    var items = NAV_ORDER.filter(function(key){ return isModuleAllowed(key); }).map(function(key){
       var isOverview = key === "overview";
       var isExternal = !!EXTERNAL_VIEWS[key];
       var isInternal = !!INTERNAL_VIEWS[key];
@@ -811,17 +829,17 @@
       return Math.round((due-today)/86400000) <= 14;
     });
     var cards = [
-      {label:"会议记录", big:m.length, sub: m.length ? statusBreakdown(m,["进行中","已完成","待跟进"]) : "尚无记录"},
-      {label:"SOP 文档", big:s.length, sub: s.length ? statusBreakdown(s,["启用","草稿","停用"]) : "尚无记录"},
-      {label:"检验记录", big: inspFail.length, sub: "共 "+insp.length+" 条 · 不合格 "+inspFail.length, highlight: inspFail.length>0},
-      {label:"客户投诉", big: cplPending.length, sub: "共 "+cpl.length+" 条 · 待处理 "+cplPending.length, highlight: cplPending.length>0},
-      {label:"设备校准", big: calDue.length, sub: "共 "+cal.length+" 条 · 即将/已到期 "+calDue.length, highlight: calDue.length>0},
-      {label:"批次追溯", big: trc.length, sub: "共 "+trc.length+" 条记录"},
-      {label:"产品损毁记录", big: dPending.length, sub: "共 "+d.length+" 条记录", highlight: dPending.length>0},
-      {label:"追踪记录", big: tOpen.length, sub: tOverdue.length ? ("共 "+t.length+" 条 · 已延误 "+tOverdue.length) : ("共 "+t.length+" 条"), highlight: tOverdue.length>0},
-      {label:"在职人员", big: st.filter(function(x){return x.status==="在职";}).length, sub: "共 "+st.length+" 人"},
-      {label:"请假申请", link: LEAVE_APP_URL, sub:"前往 exclwell 系统"}
-    ];
+      {key:"meetings", label:"会议记录", big:m.length, sub: m.length ? statusBreakdown(m,["进行中","已完成","待跟进"]) : "尚无记录"},
+      {key:"sops", label:"SOP 文档", big:s.length, sub: s.length ? statusBreakdown(s,["启用","草稿","停用"]) : "尚无记录"},
+      {key:"inspections", label:"检验记录", big: inspFail.length, sub: "共 "+insp.length+" 条 · 不合格 "+inspFail.length, highlight: inspFail.length>0},
+      {key:"complaints", label:"客户投诉", big: cplPending.length, sub: "共 "+cpl.length+" 条 · 待处理 "+cplPending.length, highlight: cplPending.length>0},
+      {key:"calibrations", label:"设备校准", big: calDue.length, sub: "共 "+cal.length+" 条 · 即将/已到期 "+calDue.length, highlight: calDue.length>0},
+      {key:"traces", label:"批次追溯", big: trc.length, sub: "共 "+trc.length+" 条记录"},
+      {key:"damages", label:"产品损毁记录", big: dPending.length, sub: "共 "+d.length+" 条记录", highlight: dPending.length>0},
+      {key:"trackers", label:"追踪记录", big: tOpen.length, sub: tOverdue.length ? ("共 "+t.length+" 条 · 已延误 "+tOverdue.length) : ("共 "+t.length+" 条"), highlight: tOverdue.length>0},
+      {key:"staff", label:"在职人员", big: st.filter(function(x){return x.status==="在职";}).length, sub: "共 "+st.length+" 人"},
+      {key:"leaves", label:"请假申请", link: LEAVE_APP_URL, sub:"前往 exclwell 系统"}
+    ].filter(function(c){ return isModuleAllowed(c.key); });
     return '<div class="view-header"><h2 class="view-title">总览</h2></div>'
       + '<div class="stat-grid">' + cards.map(renderStatCard).join("") + '</div>';
   }
@@ -842,6 +860,7 @@
     render();
     fetch("/api/users").then(function(res){
       if(res.status === 401){ showLogin("登录已过期，请重新输入密码。"); throw new Error("__unauthorized__"); }
+      if(res.status === 403){ ACCOUNTS.loading = false; ACCOUNTS.error = "你的账号没有账号管理的权限。"; render(); throw new Error("__forbidden__"); }
       if(!res.ok) throw new Error("load_failed");
       return res.json();
     }).then(function(json){
@@ -849,11 +868,27 @@
       ACCOUNTS.loading = false;
       render();
     }).catch(function(err){
-      if(err && err.message === "__unauthorized__") return;
+      if(err && (err.message === "__unauthorized__" || err.message === "__forbidden__")) return;
       ACCOUNTS.loading = false;
       ACCOUNTS.error = "加载失败，请重试";
       render();
     });
+  }
+
+  function renderModuleCheckboxes(namePrefix, checked){
+    checked = checked || [];
+    return '<div class="perm-grid">' + RESTRICTABLE_MODULES.map(function(key){
+      var isChecked = checked.indexOf(key) > -1;
+      return '<label class="perm-item"><input type="checkbox" name="'+namePrefix+key+'" value="'+key+'" '+(isChecked?"checked":"")+'> '+esc(moduleLabel(key))+'</label>';
+    }).join("") + '</div>';
+  }
+
+  function collectCheckedModules(form, namePrefix){
+    var checked = RESTRICTABLE_MODULES.filter(function(key){
+      var el = form.elements[namePrefix+key];
+      return el && el.checked;
+    });
+    return checked.length ? checked : null; // none checked = unrestricted
   }
 
   function renderAccountsView(){
@@ -868,28 +903,52 @@
     } else {
       rows = '<div class="card-grid">' + ACCOUNTS.list.map(function(u){
         var isMe = CURRENT_USER && CURRENT_USER.id === u.id;
+        var permSummary = Array.isArray(u.allowedModules)
+          ? (u.allowedModules.length ? ("可见：" + u.allowedModules.map(moduleLabel).join("、")) : "可见：无（未分配任何模块）")
+          : "可见：全部";
+        var editing = ACCOUNTS.editingId === u.id;
+        var editPanel = editing
+          ? '<form class="perm-edit-form" onsubmit="app.savePermissions(event,\''+u.id+'\')">'
+            + renderModuleCheckboxes("perm_", u.allowedModules)
+            + '<p class="external-desc" style="margin:8px 0;">一个都不勾 = 不限制，可看到全部模块。</p>'
+            + '<div class="card-actions">'
+            + '<button type="submit" class="btn btn-primary btn-sm" '+wd+'>保存权限</button>'
+            + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.togglePermEdit(null)">取消</button>'
+            + '</div></form>'
+          : '';
         return '<div class="card">'
           + '<div class="card-top"><span class="card-id num">@'+esc(u.username)+'</span>'+(isMe?'<span class="chip chip-accent">我</span>':'')+'</div>'
           + '<h3 class="card-title">'+esc(u.name)+'</h3>'
-          + '<div class="card-meta"><p>'+(u.createdAt?("加入时间："+esc(u.createdAt.slice(0,10))):"")+'</p></div>'
-          + '<div class="card-actions">'
-          + '<button class="btn btn-danger btn-sm" onclick="app.removeTeammate(\''+u.id+'\',\''+esc(u.name)+'\')" '+wd+'>移除账号</button>'
-          + '</div></div>';
+          + '<div class="card-meta"><p>'+(u.createdAt?("加入时间："+esc(u.createdAt.slice(0,10))):"")+'</p><p>'+esc(permSummary)+'</p></div>'
+          + (editing ? editPanel : (
+              '<div class="card-actions">'
+              + '<button class="btn btn-ghost btn-sm" onclick="app.togglePermEdit(\''+u.id+'\')" '+wd+'>编辑权限</button>'
+              + '<button class="btn btn-danger btn-sm" onclick="app.removeTeammate(\''+u.id+'\',\''+esc(u.name)+'\')" '+wd+'>移除账号</button>'
+              + '</div>'
+            ))
+          + '</div>';
       }).join("") + '</div>';
     }
     return '<div class="view-header"><h2 class="view-title">账号管理</h2></div>'
       + '<div class="panel" style="margin-bottom:18px;">'
       + '<h3 class="panel-title">添加团队成员</h3>'
-      + '<p class="external-desc">需要团队邀请码（跟登录页"没有账号"用的是同一个），新成员自己在登录页设置账号也可以，不一定要你来加。</p>'
+      + '<p class="external-desc">需要团队邀请码（跟登录页"没有账号"用的是同一个），新成员自己在登录页设置账号也可以，不一定要你来加。默认能看到全部模块，需要限制的话在下面勾选。</p>'
       + '<form id="add-teammate-form" class="add-teammate-form" onsubmit="app.addTeammate(event)">'
       + '<input class="input" type="password" name="teamPin" placeholder="团队邀请码" autocomplete="off">'
       + '<input class="input" type="text" name="name" placeholder="姓名">'
       + '<input class="input" type="text" name="username" placeholder="用户名">'
       + '<input class="input" type="password" name="password" placeholder="初始密码（至少 4 位）" autocomplete="new-password">'
+      + '<p class="external-desc" style="margin:10px 0 4px;">限制这个人只能看到（不勾选 = 不限制，全部可见）：</p>'
+      + renderModuleCheckboxes("new_", [])
       + '<button type="submit" class="btn btn-primary" '+wd+'>添加</button>'
       + '</form>'
       + '</div>'
       + rows;
+  }
+
+  function togglePermEdit(id){
+    ACCOUNTS.editingId = id;
+    render();
   }
 
   function addTeammate(e){
@@ -900,7 +959,8 @@
       teamPin: form.elements["teamPin"].value,
       name: form.elements["name"].value,
       username: form.elements["username"].value,
-      password: form.elements["password"].value
+      password: form.elements["password"].value,
+      allowedModules: collectCheckedModules(form, "new_")
     };
     var btn = form.querySelector('button[type="submit"]');
     if(btn) btn.disabled = true;
@@ -922,6 +982,33 @@
     }).catch(function(err){
       if(err && err.message === "__unauthorized__") return;
       toast(err.message || "添加失败，请重试");
+      if(btn) btn.disabled = false;
+    });
+  }
+
+  function savePermissions(e, id){
+    e.preventDefault();
+    var form = e.target;
+    var allowedModules = collectCheckedModules(form, "perm_");
+    var btn = form.querySelector('button[type="submit"]');
+    if(btn) btn.disabled = true;
+    fetch("/api/users", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({op:"setPermissions", id:id, allowedModules:allowedModules})
+    }).then(function(res){
+      if(res.status === 401){ showLogin("登录已过期，请重新输入密码。"); throw new Error("__unauthorized__"); }
+      return res.json().catch(function(){ return {}; }).then(function(json){
+        if(!res.ok) throw new Error(json.message || "保存失败，请重试");
+        return json;
+      });
+    }).then(function(){
+      toast("已更新权限");
+      ACCOUNTS.editingId = null;
+      fetchAccounts();
+    }).catch(function(err){
+      if(err && err.message === "__unauthorized__") return;
+      toast(err.message || "保存失败，请重试");
       if(btn) btn.disabled = false;
     });
   }
@@ -964,6 +1051,7 @@
   /* ---------- actions ---------- */
 
   function setView(key){
+    if(!isModuleAllowed(key)) key = "overview";
     UI.view = key; UI.modal = null; UI.confirmDelete = null;
     render();
     if(key === "accounts") fetchAccounts();
@@ -1096,6 +1184,7 @@
       if(!json) return;
       applyServerState(json.state);
       if(json.user) CURRENT_USER = json.user;
+      if(UI && !isModuleAllowed(UI.view)) UI.view = "overview";
       render();
     }).catch(function(){});
   }
@@ -1225,7 +1314,8 @@
     submitLogin: submitLogin, submitJoin: submitJoin, toggleLoginMode: toggleLoginMode, logout: logout,
     createTrackerFromFlag: createTrackerFromFlag,
     addReportItem: addReportItem, removeReportItem: removeReportItem, syncReportItems: syncReportItems,
-    addTeammate: addTeammate, removeTeammate: removeTeammate
+    addTeammate: addTeammate, removeTeammate: removeTeammate,
+    togglePermEdit: togglePermEdit, savePermissions: savePermissions
   };
 
   if(document.readyState === "loading"){

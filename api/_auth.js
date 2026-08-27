@@ -13,6 +13,22 @@ const db = require("./_db");
 
 var USERS_KEY = "team-archive:users";
 
+// Modules that a user's account can be restricted to a subset of.
+// "overview" and "leaves" are never restricted (leaves is just an
+// external link; overview is filtered down to whatever the user can see).
+var RESTRICTABLE_MODULES = [
+  "meetings", "sops", "inspections", "complaints", "calibrations", "traces",
+  "damages", "trackers", "staff", "accounts"
+];
+
+// A user's `allowedModules` is either null/undefined (full access, the
+// default for every existing account and any newly added without picking
+// a restriction) or an array of module keys they're limited to.
+function canAccess(user, moduleKey) {
+  if (!user || !Array.isArray(user.allowedModules)) return true;
+  return user.allowedModules.indexOf(moduleKey) > -1;
+}
+
 function parseCookies(req) {
   var header = req.headers.cookie || "";
   var out = {};
@@ -86,7 +102,12 @@ async function currentUser(req) {
   var users = await getUsers();
   var u = users.find(function (x) { return x.id === payload.uid && !x.deleted; });
   if (!u) return null;
-  return { id: u.id, name: u.name, username: u.username };
+  return {
+    id: u.id,
+    name: u.name,
+    username: u.username,
+    allowedModules: Array.isArray(u.allowedModules) ? u.allowedModules : null,
+  };
 }
 
 module.exports = {
@@ -96,5 +117,7 @@ module.exports = {
   getUsers: getUsers,
   hashPassword: hashPassword,
   verifyPassword: verifyPassword,
+  canAccess: canAccess,
+  RESTRICTABLE_MODULES: RESTRICTABLE_MODULES,
   USERS_KEY: USERS_KEY,
 };
