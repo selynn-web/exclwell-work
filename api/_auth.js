@@ -17,8 +17,8 @@ var USERS_KEY = "team-archive:users";
 // "overview" and "leaves" are never restricted (leaves is just an
 // external link; overview is filtered down to whatever the user can see).
 var RESTRICTABLE_MODULES = [
-  "meetings", "sops", "inspections", "complaints", "calibrations", "traces",
-  "damages", "trackers", "staff", "accounts"
+  "meetings", "sops", "inspections", "complaints", "calibrations", "repairs", "traces",
+  "damages", "trackers", "accounts"
 ];
 
 // A user's `allowedModules` is either null/undefined (full access, the

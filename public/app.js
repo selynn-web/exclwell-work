@@ -228,6 +228,23 @@
     "下次到期：": {en:"Next Due: ", ms:"Tarikh Akan Datang: "},
     "暂无设备校准 / 保养记录，点击\"新建校准记录\"登记。": {en:"No calibration/maintenance records yet. Click \"New Calibration Record\" to log one.", ms:"Belum ada rekod penentukuran/penyelenggaraan peralatan. Klik \"Rekod Penentukuran Baharu\" untuk mendaftar."},
 
+    // repairs module
+    "设备维修记录": {en:"Equipment Repair Records", ms:"Rekod Pembaikan Peralatan"},
+    "设备维修": {en:"Equipment Repairs", ms:"Pembaikan Peralatan"},
+    "维修记录": {en:"Repair Record", ms:"Rekod Pembaikan"},
+    "维修日期": {en:"Repair Date", ms:"Tarikh Pembaikan"},
+    "故障描述": {en:"Issue Description", ms:"Penerangan Masalah"},
+    "维修内容 / 处理方式": {en:"Repair Actions Taken", ms:"Tindakan Pembaikan"},
+    "维修人员 / 单位": {en:"Technician / Vendor", ms:"Juruteknik / Vendor"},
+    "维修费用（RM）": {en:"Repair Cost (RM)", ms:"Kos Pembaikan (RM)"},
+    "待维修": {en:"Awaiting Repair", ms:"Menunggu Pembaikan"},
+    "维修中": {en:"In Repair", ms:"Sedang Dibaiki"},
+    "维修人员：": {en:"Technician: ", ms:"Juruteknik: "},
+    "费用：": {en:"Cost: ", ms:"Kos: "},
+    "来源维修记录（可选）": {en:"Source Repair Record (optional)", ms:"Rekod Pembaikan Sumber (pilihan)"},
+    "来源维修：": {en:"Source Repair: ", ms:"Pembaikan Sumber: "},
+    "暂无设备维修记录，点击\"新建维修记录\"登记，也可以切换到\"日历\"视图按日期查看。": {en:"No repair records yet. Click \"New Repair Record\" to log one, or switch to the \"Calendar\" view to browse by date.", ms:"Belum ada rekod pembaikan. Klik \"Rekod Pembaikan Baharu\" untuk mendaftar, atau tukar ke paparan \"Kalendar\" untuk melihat mengikut tarikh."},
+
     // traces module
     "批次追溯": {en:"Batch Traceability", ms:"Kebolehjejakan Kelompok"},
     "生产批号": {en:"Production Batch No.", ms:"No. Kelompok Pengeluaran"},
@@ -253,7 +270,7 @@
     "打开请假申请系统 ↗": {en:"Open Leave System ↗", ms:"Buka Sistem Cuti ↗"},
     "账号管理": {en:"Account Management", ms:"Pengurusan Akaun"},
     "团队档案台": {en:"Team Archive", ms:"Arkib Pasukan"},
-    "会议 · SOP · 品质 · 人员": {en:"Meetings · SOPs · Quality · Staff", ms:"Mesyuarat · SOP · Kualiti · Kakitangan"},
+    "会议 · SOP · 品质 · 设备": {en:"Meetings · SOPs · Quality · Equipment", ms:"Mesyuarat · SOP · Kualiti · Peralatan"},
     "外部 ↗": {en:"External ↗", ms:"Luaran ↗"},
     "连接中…": {en:"Connecting…", ms:"Menyambung…"},
     "已连接 · 可编辑": {en:"Connected · Editable", ms:"Disambung · Boleh Edit"},
@@ -521,25 +538,6 @@
       },
       emptyText:'暂无 SOP，点击"新建 SOP"添加第一份流程文档。'
     },
-    staff:{
-      key:"staff", label:"人员管理", singular:"人员", idPrefix:"STF", titleField:"name",
-      fields:[
-        {name:"name", label:"姓名", type:"text", required:true},
-        {name:"department", label:"部门", type:"text", datalist:"deptList"},
-        {name:"position", label:"职位", type:"text"},
-        {name:"contact", label:"联系方式", type:"text"},
-        {name:"entryDate", label:"入职日期", type:"date"},
-        {name:"status", label:"状态", type:"select", options:["在职","休假中","离职"], def:"在职"}
-      ],
-      statusColors:{"在职":"good","休假中":"warn","离职":"neutral"},
-      metaLines:function(r){
-        return [
-          [r.department, r.position].filter(Boolean).join(" · "),
-          r.contact || ""
-        ].filter(Boolean);
-      },
-      emptyText:'暂无人员记录，点击"新建人员"添加团队成员。'
-    },
     damages:{
       key:"damages", label:"产品损毁记录", singular:"损毁记录", idPrefix:"DMG", titleField:"product",
       fields:[
@@ -576,6 +574,13 @@
           });
           return opts;
         }},
+        {name:"repairRef", label:"来源维修记录（可选）", type:"select", options:function(){
+          var opts = [{value:"", label:T("（无，直接新建）")}];
+          (STATE.repairs||[]).slice().reverse().forEach(function(m){
+            opts.push({value:m.id, label:m.id+" · "+(m.equipment||T("未命名"))+(m.date?(" ("+m.date+")"):"")});
+          });
+          return opts;
+        }},
         {name:"owner", label:"负责人", type:"text"},
         {name:"dueDate", label:"预计完成日期", type:"date"},
         {name:"status", label:"状态", type:"select", options:["待处理","进行中","已完成","已延误"], def:"待处理"},
@@ -607,6 +612,10 @@
         if(r.meetingRef){
           var mm = STATE.meetings.find(function(x){ return x.id === r.meetingRef; });
           lines.push(T("来源会议：")+(mm ? (mm.title||mm.id) : r.meetingRef));
+        }
+        if(r.repairRef){
+          var rr = (STATE.repairs||[]).find(function(x){ return x.id === r.repairRef; });
+          lines.push(T("来源维修：")+(rr ? (rr.equipment||rr.id) : r.repairRef));
         }
         lines.push([r.owner ? T("负责人：")+r.owner : "", r.dueDate ? T("预计完成：")+r.dueDate : ""].filter(Boolean).join(" · "));
         lines.push(r.notes || "");
@@ -704,6 +713,41 @@
       },
       emptyText:'暂无设备校准 / 保养记录，点击"新建校准记录"登记。'
     },
+    repairs:{
+      key:"repairs", label:"设备维修记录", singular:"维修记录", idPrefix:"RPR", titleField:"equipment",
+      fields:[
+        {name:"equipment", label:"设备名称", type:"text", required:true},
+        {name:"department", label:"部门", type:"select", options:DEPARTMENTS, def:"大豆部门"},
+        {name:"date", label:"维修日期", type:"date", required:true},
+        {name:"issue", label:"故障描述", type:"textarea", full:true, required:true},
+        {name:"action", label:"维修内容 / 处理方式", type:"textarea", full:true},
+        {name:"technician", label:"维修人员 / 单位", type:"text"},
+        {name:"cost", label:"维修费用（RM）", type:"text"},
+        {name:"status", label:"状态", type:"select", options:["待维修","维修中","已完成"], def:"待维修"}
+      ],
+      statusColors:{"待维修":"warn","维修中":"accent","已完成":"good"},
+      secondaryBadge:function(r){
+        var count = (STATE.trackers||[]).filter(function(t){ return t.repairRef === r.id; }).length;
+        if(!count) return null;
+        return { text: count+" "+T("项追踪"), color:"accent" };
+      },
+      extraActions:function(r){
+        var count = (STATE.trackers||[]).filter(function(t){ return t.repairRef === r.id; }).length;
+        var actions = [];
+        if(count) actions.push({ label:T("查看追踪")+" ("+count+")", onclick:"app.setView('trackers')" });
+        actions.push({ label:"+ "+T3("建追踪事项","New Tracked Item","Item Dijejak Baharu"), onclick:"app.createTrackerFromRepair('"+r.id+"')" });
+        return actions;
+      },
+      metaLines:function(r){
+        return [
+          [r.date, r.department ? T(r.department) : ""].filter(Boolean).join(" · "),
+          r.issue || "",
+          r.action ? T("处理：")+r.action : "",
+          [r.technician ? T("维修人员：")+r.technician : "", r.cost ? T("费用：")+"RM "+r.cost : ""].filter(Boolean).join(" · ")
+        ].filter(Boolean);
+      },
+      emptyText:'暂无设备维修记录，点击"新建维修记录"登记，也可以切换到"日历"视图按日期查看。'
+    },
     traces:{
       key:"traces", label:"批次追溯", singular:"追溯记录", idPrefix:"TRC", titleField:"productBatch",
       fields:[
@@ -726,7 +770,7 @@
       emptyText:'暂无批次追溯记录，点击"新建追溯记录"登记原料到出货的批号对应关系。'
     }
   };
-  var NAV_ORDER = ["overview","meetings","sops","inspections","complaints","calibrations","traces","damages","trackers","staff","leaves","accounts"];
+  var NAV_ORDER = ["overview","meetings","sops","inspections","complaints","calibrations","repairs","traces","damages","trackers","leaves","accounts"];
   var LEAVE_APP_URL = "https://exclwell-leave-app.vercel.app/";
   var EXTERNAL_VIEWS = {
     leaves: { label:"请假管理", url: LEAVE_APP_URL, title:"请假申请已迁移至独立系统",
@@ -739,7 +783,7 @@
   // Modules an account can be restricted to a subset of — mirrors
   // api/_auth.js's RESTRICTABLE_MODULES. "overview" and "leaves" are
   // never restricted.
-  var RESTRICTABLE_MODULES = ["meetings","sops","inspections","complaints","calibrations","traces","damages","trackers","staff","accounts"];
+  var RESTRICTABLE_MODULES = ["meetings","sops","inspections","complaints","calibrations","repairs","traces","damages","trackers","accounts"];
   function moduleLabel(key){
     if(MODULES[key]) return T(MODULES[key].label);
     if(INTERNAL_VIEWS[key]) return T(INTERNAL_VIEWS[key].label);
@@ -771,16 +815,26 @@
 
   function defaultState(){
     return {
-      meetings:[], sops:[], staff:[], damages:[], trackers:[],
+      // "staff" stays here even though 人员管理 has no UI anymore — it's
+      // load-bearing plumbing, not a leftover: any staff data already saved
+      // in Supabase before this module was removed from the interface must
+      // keep round-tripping through this shape unchanged (see api/state.js
+      // for the matching server-side note), and the WhatsApp-reminder phone
+      // lookup still reads it as a fallback (see findStaffContact()).
+      meetings:[], sops:[], staff:[], damages:[], trackers:[], repairs:[],
       inspections:[], complaints:[], calibrations:[], traces:[],
-      counters:{MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0}
+      counters:{MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0}
     };
   }
   function defaultUI(){
+    var now = new Date();
     return {
       view:"overview",
-      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:""},
-      modal:null, confirmDelete:null
+      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:"",repairs:""},
+      modal:null, confirmDelete:null,
+      repairsViewMode:"list",
+      calendarCursor:{y:now.getFullYear(), m:now.getMonth()},
+      calendarSelectedDate:null
     };
   }
   function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
@@ -1022,9 +1076,9 @@
      person still reviews and taps Send inside WhatsApp themselves. That
      keeps it free and instant, with no WhatsApp Business API / Twilio
      account, no approval process, and no per-message cost. The phone
-     number is looked up automatically from 人员管理 (Staff) by matching the
-     tracker's "负责人" (owner) name against a staff record's name, reading
-     that staff member's "联系方式" (contact) field. */
+     number is looked up by matching the tracker's "负责人" (owner) name
+     against an account's name in 账号管理 first, then (for any legacy
+     record predating that field) against an old 人员管理 record's name. */
 
   function trackerReminderInfo(r){
     if(!r || r.status === "已完成") return null;
@@ -1062,11 +1116,11 @@
     return match ? match.phone : null;
   }
 
-  // Checks both possible places a phone number could have been entered:
-  // the person's own login account (账号管理 → 编辑权限, the quicker path
-  // since every team member already has one), and the 人员管理 staff
-  // record with a matching name (the original path, for people tracked in
-  // Staff who may not have — or need — a login account).
+  // Checks the account directory first (账号管理 → 编辑权限 — the only
+  // place to enter a phone number now that 人员管理 has no UI), then falls
+  // back to any pre-existing 人员管理 staff record with a matching name —
+  // that data is still preserved server-side (see defaultState()'s note)
+  // even though there's no screen to add new entries there any more.
   function findOwnerPhone(name){
     return findAccountPhone(name) || findStaffContact(name);
   }
@@ -1122,18 +1176,18 @@
     var contactRaw = findOwnerPhone(ownerName);
     if(!contactRaw){
       toast(T3(
-        "找不到“" + ownerName + "”的手机号码，请在账号管理（编辑权限）或人员管理里给这个人补上手机号码 / 联系方式",
-        "Could not find a phone number for “" + ownerName + "” — please add one either in Account Management (Edit Permissions) or in Staff",
-        "Tidak jumpa nombor telefon untuk “" + ownerName + "” — sila tambah dalam Pengurusan Akaun (Edit Kebenaran) atau Pengurusan Kakitangan"
+        "找不到“" + ownerName + "”的手机号码，请去账号管理找到这个人，点「编辑权限」补上手机号码",
+        "Could not find a phone number for “" + ownerName + "” — go to Account Management, find this person, and add one via \"Edit Permissions\"",
+        "Tidak jumpa nombor telefon untuk “" + ownerName + "” — pergi ke Pengurusan Akaun, cari orang ini, dan tambah nombor melalui \"Edit Kebenaran\""
       ));
       return;
     }
     var phone = normalizeMsPhone(contactRaw);
     if(!phone){
       toast(T3(
-        "“" + ownerName + "”的手机号码格式无法识别，请检查账号管理或人员管理里填的号码",
-        "Could not recognize “" + ownerName + "”'s phone number format — please check the number entered in Account Management or Staff",
-        "Format nombor telefon “" + ownerName + "” tidak dapat dikenali — sila semak nombor dalam Pengurusan Akaun atau Pengurusan Kakitangan"
+        "“" + ownerName + "”的手机号码格式无法识别，请去账号管理检查填的号码",
+        "Could not recognize “" + ownerName + "”'s phone number format — please check the number entered in Account Management",
+        "Format nombor telefon “" + ownerName + "” tidak dapat dikenali — sila semak nombor dalam Pengurusan Akaun"
       ));
       return;
     }
@@ -1234,7 +1288,7 @@
         + (count!==null ? '<span class="nav-count num">'+count+'</span>' : (isExternal ? '<span class="nav-ext">'+esc(T("外部 ↗"))+'</span>' : ''))
         + '</button>';
     }).join("");
-    return '<div class="brand">'+esc(T("团队档案台"))+'<span class="brand-sub">'+esc(T("会议 · SOP · 品质 · 人员"))+'</span></div><nav class="nav">'+items+'</nav>'
+    return '<div class="brand">'+esc(T("团队档案台"))+'<span class="brand-sub">'+esc(T("会议 · SOP · 品质 · 设备"))+'</span></div><nav class="nav">'+items+'</nav>'
       + renderLangSwitcher("lang-switch-sidebar");
   }
 
@@ -1456,6 +1510,7 @@
   }
 
   function renderModuleView(moduleKey){
+    if(moduleKey === "repairs") return renderRepairsView();
     var mod = MODULES[moduleKey];
     var list = getFiltered(moduleKey).slice().reverse();
     var wd = writeDisabled();
@@ -1475,6 +1530,116 @@
           : '<div class="empty-state">'+esc(T(mod.emptyText))+'</div>');
   }
 
+  /* --- 设备维修记录: list / calendar toggle -------------------------------
+     Repairs is the one module with two view modes. List mode is the same
+     generic search+card-grid every other module gets; calendar mode groups
+     the same records onto a month grid by "维修日期" (repair date) so a
+     week or a month's worth of repairs can be scanned/edited by date. */
+
+  function pad2(n){ return n < 10 ? "0"+n : ""+n; }
+  function dateToStr(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
+
+  var WEEKDAY_NAMES = { zh:["日","一","二","三","四","五","六"], en:["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], ms:["Ahd","Isn","Sel","Rab","Kha","Jum","Sab"] };
+  var MONTH_NAMES = { en:["January","February","March","April","May","June","July","August","September","October","November","December"],
+                       ms:["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"] };
+
+  function renderRepairsView(){
+    var mod = MODULES.repairs;
+    var mode = UI.repairsViewMode || "list";
+    var wd = writeDisabled();
+    var modLabel = T(mod.label), modSingular = T(mod.singular);
+    var searchPlaceholder = T3("搜索"+modLabel+"…", "Search "+modLabel+"…", "Cari "+modLabel+"…");
+    var newBtnLabel = T3("+ 新建"+modSingular, "+ New "+modSingular, "+ "+modSingular+" Baharu");
+    var toggle = '<div class="view-mode-toggle">'
+      + '<button type="button" class="btn btn-sm '+(mode==="list"?"btn-primary":"btn-ghost")+'" onclick="app.setRepairsViewMode(\'list\')">'+esc(T3("列表","List","Senarai"))+'</button>'
+      + '<button type="button" class="btn btn-sm '+(mode==="calendar"?"btn-primary":"btn-ghost")+'" onclick="app.setRepairsViewMode(\'calendar\')">'+esc(T3("日历","Calendar","Kalendar"))+'</button>'
+      + '</div>';
+    var header = '<div class="view-header">'
+      + '<h2 class="view-title">'+esc(modLabel)+' <span class="view-count num">'+STATE.repairs.length+'</span></h2>'
+      + '<div class="view-tools">'
+      + toggle
+      + (mode === "list" ? (
+          '<input class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search.repairs||"")+'" oninput="app.setSearch(\'repairs\', this.value)">'
+          + '<button class="btn btn-ghost" onclick="app.exportModule(\'repairs\')">'+esc(T("导出全部"))+'</button>'
+        ) : '')
+      + '<button class="btn btn-primary" onclick="app.openModal(\'repairs\', null)" '+wd+'>'+esc(newBtnLabel)+'</button>'
+      + '</div></div>';
+    if(mode === "calendar") return header + renderRepairsCalendar();
+    var list = getFiltered("repairs").slice().reverse();
+    return header + (list.length
+      ? '<div class="card-grid">' + list.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
+      : '<div class="empty-state">'+esc(T(mod.emptyText))+'</div>');
+  }
+
+  function renderRepairsCalendar(){
+    var cursor = UI.calendarCursor;
+    var y = cursor.y, m = cursor.m;
+    var first = new Date(y, m, 1);
+    var startWeekday = first.getDay();
+    var daysInMonth = new Date(y, m+1, 0).getDate();
+    var todayStr = dateToStr(new Date());
+
+    var byDate = {};
+    (STATE.repairs||[]).forEach(function(r){
+      if(!r.date) return;
+      (byDate[r.date] = byDate[r.date] || []).push(r);
+    });
+
+    var monthLabel = LANG === "zh" ? (y+" 年 "+(m+1)+" 月") : (MONTH_NAMES[LANG][m]+" "+y);
+    var weekdayNames = WEEKDAY_NAMES[LANG] || WEEKDAY_NAMES.zh;
+
+    var cells = [];
+    for(var i=0;i<startWeekday;i++) cells.push('<div class="cal-cell cal-cell-empty"></div>');
+    for(var day=1; day<=daysInMonth; day++){
+      var dateStr = y+"-"+pad2(m+1)+"-"+pad2(day);
+      var dayRecords = byDate[dateStr] || [];
+      var isToday = dateStr === todayStr;
+      var isSelected = UI.calendarSelectedDate === dateStr;
+      var dots = dayRecords.slice(0,4).map(function(r){
+        var colorKey = MODULES.repairs.statusColors[r.status] || "neutral";
+        return '<span class="cal-dot cal-dot-'+colorKey+'" title="'+esc(r.equipment||"")+'"></span>';
+      }).join("");
+      var more = dayRecords.length > 4 ? '<span class="cal-more">+'+(dayRecords.length-4)+'</span>' : '';
+      var cls = "cal-cell"+(isToday?" cal-cell-today":"")+(isSelected?" cal-cell-selected":"")+(dayRecords.length?" cal-cell-has":"");
+      cells.push('<button type="button" class="'+cls+'" onclick="app.selectCalendarDate(\''+dateStr+'\')">'
+        + '<span class="cal-daynum">'+day+'</span>'
+        + '<span class="cal-dots">'+dots+more+'</span>'
+        + '</button>');
+    }
+
+    var nav = '<div class="cal-nav">'
+      + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.calendarNav(-1)">‹</button>'
+      + '<span class="cal-month-label">'+esc(monthLabel)+'</span>'
+      + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.calendarNav(1)">›</button>'
+      + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.calendarNav(0)">'+esc(T3("今天","Today","Hari Ini"))+'</button>'
+      + '</div>';
+
+    var grid = '<div class="cal-grid">'
+      + weekdayNames.map(function(w){ return '<div class="cal-weekday">'+esc(w)+'</div>'; }).join("")
+      + cells.join("")
+      + '</div>';
+
+    return '<div class="calendar-wrap">' + nav + grid + '</div>' + renderCalendarDayPanel();
+  }
+
+  function renderCalendarDayPanel(){
+    var sel = UI.calendarSelectedDate;
+    if(!sel) return '';
+    var wd = writeDisabled();
+    var records = (STATE.repairs||[]).filter(function(r){ return r.date === sel; });
+    var listHtml = records.length
+      ? '<div class="card-grid">' + records.map(function(r){ return renderCard(MODULES.repairs, r); }).join("") + '</div>'
+      : '<div class="empty-state">'+esc(T3("这一天还没有维修记录。","No repair records on this day yet.","Belum ada rekod pembaikan pada hari ini."))+'</div>';
+    return '<div class="panel cal-day-panel">'
+      + '<div class="view-header"><h3 class="panel-title">'+esc(sel)+'</h3>'
+      + '<div class="view-tools">'
+      + '<button class="btn btn-primary btn-sm" onclick="app.openModal(\'repairs\', null, {date:\''+sel+'\'})" '+wd+'>'+esc(T3("+ 新建维修记录","+ New Repair Record","+ Rekod Pembaikan Baharu"))+'</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="app.selectCalendarDate(null)">'+esc(T3("关闭","Close","Tutup"))+'</button>'
+      + '</div></div>'
+      + listHtml
+      + '</div>';
+  }
+
   function renderStatCard(c){
     if(c.link){
       return '<a class="stat-card stat-card-link" href="'+esc(c.link)+'" target="_blank" rel="noopener noreferrer">'
@@ -1491,13 +1656,14 @@
   }
 
   function renderOverview(){
-    var m = STATE.meetings, s = STATE.sops, st = STATE.staff, d = STATE.damages, t = STATE.trackers;
+    var m = STATE.meetings, s = STATE.sops, d = STATE.damages, t = STATE.trackers, rp = STATE.repairs||[];
     var insp = STATE.inspections, cpl = STATE.complaints, cal = STATE.calibrations, trc = STATE.traces;
     var dPending = d.filter(function(x){ return x.status === "待处理"; });
     var tOpen = t.filter(function(x){ return x.status !== "已完成"; });
     var tOverdue = t.filter(function(x){ return x.status === "已延误"; });
     var inspFail = insp.filter(function(x){ return x.result === "不合格"; });
     var cplPending = cpl.filter(function(x){ return x.status !== "已完成"; });
+    var rpOpen = rp.filter(function(x){ return x.status !== "已完成"; });
     var today = new Date(); today.setHours(0,0,0,0);
     var calDue = cal.filter(function(x){
       if(!x.nextDueDate) return false;
@@ -1511,10 +1677,10 @@
       {key:"inspections", label:T("检验记录"), big: inspFail.length, sub: T3("共 "+insp.length+" 条 · 不合格 "+inspFail.length, insp.length+" total · "+inspFail.length+" failed", insp.length+" jumlah · "+inspFail.length+" gagal"), highlight: inspFail.length>0},
       {key:"complaints", label:T("客户投诉"), big: cplPending.length, sub: T3("共 "+cpl.length+" 条 · 待处理 "+cplPending.length, cpl.length+" total · "+cplPending.length+" pending", cpl.length+" jumlah · "+cplPending.length+" belum selesai"), highlight: cplPending.length>0},
       {key:"calibrations", label:T("设备校准"), big: calDue.length, sub: T3("共 "+cal.length+" 条 · 即将/已到期 "+calDue.length, cal.length+" total · "+calDue.length+" due soon/overdue", cal.length+" jumlah · "+calDue.length+" akan/telah tamat tempoh"), highlight: calDue.length>0},
+      {key:"repairs", label:T("设备维修"), big: rpOpen.length, sub: T3("共 "+rp.length+" 条 · 未完成 "+rpOpen.length, rp.length+" total · "+rpOpen.length+" open", rp.length+" jumlah · "+rpOpen.length+" belum selesai"), highlight: rpOpen.length>0},
       {key:"traces", label:T("批次追溯"), big: trc.length, sub: T3("共 "+trc.length+" 条记录", trc.length+" records", trc.length+" rekod")},
       {key:"damages", label:T("产品损毁记录"), big: dPending.length, sub: T3("共 "+d.length+" 条记录", d.length+" records", d.length+" rekod"), highlight: dPending.length>0},
       {key:"trackers", label:T("追踪记录"), big: tOpen.length, sub: tOverdue.length ? T3("共 "+t.length+" 条 · 已延误 "+tOverdue.length, t.length+" total · "+tOverdue.length+" overdue", t.length+" jumlah · "+tOverdue.length+" tertunggak") : T3("共 "+t.length+" 条", t.length+" total", t.length+" jumlah"), highlight: tOverdue.length>0},
-      {key:"staff", label:T3("在职人员","Active Staff","Kakitangan Aktif"), big: st.filter(function(x){return x.status==="在职";}).length, sub: T3("共 "+st.length+" 人", st.length+" people", st.length+" orang")},
       {key:"leaves", label:T3("请假申请","Leave Requests","Permohonan Cuti"), link: LEAVE_APP_URL, sub:T3("前往 exclwell 系统","Go to exclwell system","Pergi ke sistem exclwell")}
     ].filter(function(c){ return isModuleAllowed(c.key); });
     return '<div class="view-header"><h2 class="view-title">'+esc(T("总览"))+'</h2></div>'
@@ -1740,6 +1906,26 @@
     if(key === "accounts") fetchAccounts();
   }
   function setSearch(moduleKey, value){ UI.search[moduleKey] = value; render(); }
+
+  function setRepairsViewMode(mode){
+    UI.repairsViewMode = (mode === "calendar") ? "calendar" : "list";
+    render();
+  }
+  function calendarNav(delta){
+    if(delta === 0){
+      var now = new Date();
+      UI.calendarCursor = {y:now.getFullYear(), m:now.getMonth()};
+    } else {
+      var c = UI.calendarCursor;
+      var next = new Date(c.y, c.m + delta, 1);
+      UI.calendarCursor = {y:next.getFullYear(), m:next.getMonth()};
+    }
+    render();
+  }
+  function selectCalendarDate(dateStr){
+    UI.calendarSelectedDate = (UI.calendarSelectedDate === dateStr) ? null : dateStr;
+    render();
+  }
   function openModal(moduleKey, id, draft){ UI.modal = {module:moduleKey, id: id || null, draft: draft || null}; render(); }
 
   function createTrackerFromFlag(btn){
@@ -1749,6 +1935,12 @@
     var text = btn.getAttribute("data-text") || "";
     var issue = (T(dept)+T3("追踪：","Tracking: ","Penjejakan: ")+text).slice(0,120);
     openModal("trackers", null, { department: dept, issue: issue, meetingRef: meetingId, sourceItem: sourceKey });
+  }
+  function createTrackerFromRepair(repairId){
+    var r = (STATE.repairs||[]).find(function(x){ return x.id === repairId; });
+    if(!r) return;
+    var issue = (T3("设备维修跟进：","Equipment repair follow-up: ","Susulan pembaikan peralatan: ")+(r.equipment||r.id)).slice(0,120);
+    openModal("trackers", null, { department: r.department, issue: issue, repairRef: r.id });
   }
   function closeModal(){ UI.modal = null; render(); }
   function requestDelete(moduleKey, id){ UI.confirmDelete = {module:moduleKey, id:id}; render(); }
@@ -1814,8 +2006,8 @@
 
   function applyServerState(state){
     STATE = state;
-    if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0};
-    ["meetings","sops","staff","damages","trackers","inspections","complaints","calibrations","traces"].forEach(function(k){
+    if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0};
+    ["meetings","sops","staff","damages","trackers","repairs","inspections","complaints","calibrations","traces"].forEach(function(k){
       if(!STATE[k]) STATE[k] = [];
     });
   }
@@ -2008,13 +2200,14 @@
     submitForm: submitForm, onMeetingTypeChange: onMeetingTypeChange,
     handleFileSelect: handleFileSelect, removeAttachment: removeAttachment, downloadAttachment: downloadAttachment,
     submitLogin: submitLogin, submitJoin: submitJoin, toggleLoginMode: toggleLoginMode, logout: logout,
-    createTrackerFromFlag: createTrackerFromFlag,
+    createTrackerFromFlag: createTrackerFromFlag, createTrackerFromRepair: createTrackerFromRepair,
     addReportItem: addReportItem, removeReportItem: removeReportItem, syncReportItems: syncReportItems,
     addTeammate: addTeammate, removeTeammate: removeTeammate,
     togglePermEdit: togglePermEdit, savePermissions: savePermissions,
     setLang: setLang,
     exportRecord: exportRecord, exportModule: exportModule,
-    sendWhatsAppReminder: sendWhatsAppReminder
+    sendWhatsAppReminder: sendWhatsAppReminder,
+    setRepairsViewMode: setRepairsViewMode, calendarNav: calendarNav, selectCalendarDate: selectCalendarDate
   };
 
   if(document.readyState === "loading"){

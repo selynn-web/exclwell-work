@@ -5,9 +5,18 @@ const STATE_KEY = "team-archive:state";
 const MODULE_PREFIX = {
   meetings: "MTG",
   sops: "SOP",
+  // 人员管理 (Staff) has no UI any more — removed in favor of 账号管理
+  // holding contact phone numbers directly, plus the new 设备维修记录
+  // (repairs) module. "staff" stays in this map ONLY so any staff data
+  // already saved in Supabase before this change keeps round-tripping
+  // through normalize()/kvUpdate unchanged instead of being silently
+  // dropped on the next write — real production data, never delete it by
+  // removing this line. See public/app.js's defaultState() for the
+  // matching client-side note.
   staff: "STF",
   damages: "DMG",
   trackers: "TRK",
+  repairs: "RPR",
   inspections: "INS",
   complaints: "CPL",
   calibrations: "CAL",
