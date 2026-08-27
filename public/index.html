@@ -156,9 +156,17 @@
   .stat-num-arrow{color:var(--accent);}
 
   .panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-md); padding:18px 20px; box-shadow:var(--shadow);}
-  .panel-title{font-size:1.05rem; font-weight:600; margin-bottom:12px;}
+  .panel-title{font-size:1.05rem; font-weight:600; margin-bottom:12px; display:flex; align-items:center; gap:8px;}
   .external-panel{max-width:520px;}
   .external-desc{font-size:.9rem; color:var(--ink-dim); line-height:1.7; margin:0 0 20px;}
+
+  .flagged-panel{border-color:var(--warn-soft); background:linear-gradient(180deg,var(--warn-soft),var(--surface) 70%); margin-bottom:18px;}
+  .flagged-list{display:flex; flex-direction:column; gap:10px;}
+  .flagged-row{display:flex; align-items:center; justify-content:space-between; gap:14px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-sm); padding:10px 14px;}
+  .flagged-info{min-width:0;}
+  .flagged-info strong{font-size:.88rem; color:var(--ink);}
+  .flagged-meeting{font-size:.8rem; color:var(--ink-dim); margin-left:4px;}
+  .flagged-text{margin:3px 0 0; font-size:.78rem; color:var(--ink-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:440px;}
 
   .overlay{position:fixed; inset:0; background:rgba(20,19,16,0.44); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50;}
   .modal{background:var(--surface); border-radius:var(--radius-lg); padding:26px 28px; width:100%; max-width:580px; max-height:88vh; overflow-y:auto; box-shadow:var(--shadow);}

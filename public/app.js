@@ -9,16 +9,16 @@
       key:"meetings", label:"会议记录", singular:"会议", idPrefix:"MTG", titleField:"title",
       badgeField:"meetingType",
       reportSections:[
-        {key:"soyReport", short:"大豆"},
-        {key:"glutenReport", short:"面筋"},
-        {key:"packagingReport", short:"包装"},
-        {key:"qcReport", short:"QC"},
-        {key:"maintenanceReport", short:"维修"},
-        {key:"haccpReport", short:"HACCP"},
-        {key:"shippingReport", short:"出货"},
-        {key:"hrReport", short:"人事"},
-        {key:"procurementReport", short:"采购"},
-        {key:"otherDeptReport", short:"其他"}
+        {key:"soyReport", short:"大豆", trackKey:"soyReportTrack"},
+        {key:"glutenReport", short:"面筋", trackKey:"glutenReportTrack"},
+        {key:"packagingReport", short:"包装", trackKey:"packagingReportTrack"},
+        {key:"qcReport", short:"QC", trackKey:"qcReportTrack"},
+        {key:"maintenanceReport", short:"维修", trackKey:"maintenanceReportTrack"},
+        {key:"haccpReport", short:"HACCP", trackKey:"haccpReportTrack"},
+        {key:"shippingReport", short:"出货", trackKey:"shippingReportTrack"},
+        {key:"hrReport", short:"人事", trackKey:"hrReportTrack"},
+        {key:"procurementReport", short:"采购", trackKey:"procurementReportTrack"},
+        {key:"otherDeptReport", short:"其他", trackKey:"otherDeptReportTrack"}
       ],
       fields:(function(){
         var routineOnly = function(r){ return !r || r.meetingType!=="检讨会议"; };
@@ -35,15 +35,25 @@
         {name:"remarks", label:"备注", type:"text"},
         {type:"heading", text:"各部门汇报", showIf:routineOnly},
         {name:"soyReport", label:"大豆生产部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"产量 · 良率 · 异常情况 · 改进计划"},
+        {name:"soyReportTrack", label:"大豆部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"glutenReport", label:"面筋生产部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"产量 · 良率 · 异常情况 · 改进计划"},
+        {name:"glutenReportTrack", label:"面筋部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"packagingReport", label:"包装部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"包装进度 · 物料损耗 · 异常情况 · 改进计划"},
+        {name:"packagingReportTrack", label:"包装部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"qcReport", label:"QC 部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"检验结果 · 不合格项 · 客户投诉 · 改进措施"},
+        {name:"qcReportTrack", label:"QC 部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"maintenanceReport", label:"维修部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"设备状况 · 维修记录 · 待处理故障 · 保养计划"},
+        {name:"maintenanceReportTrack", label:"维修部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"haccpReport", label:"HACCP 部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"食品安全监控结果 · 稽核情况 · 不符合项与纠正措施"},
+        {name:"haccpReportTrack", label:"HACCP 部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"shippingReport", label:"出货部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"出货量 · 交期达成率 · 异常情况"},
+        {name:"shippingReportTrack", label:"出货部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"hrReport", label:"人事部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"人力配置 · 招聘/离职 · 培训 · 考勤异常"},
+        {name:"hrReportTrack", label:"人事部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"procurementReport", label:"采购部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"原料采购进度 · 库存状况 · 供应商问题"},
+        {name:"procurementReportTrack", label:"采购部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {name:"otherDeptReport", label:"其他部门汇报", type:"textarea", full:true, showIf:routineOnly, placeholder:"以上部门之外的事项"},
+        {name:"otherDeptReportTrack", label:"其他部门 - 是否需要追踪", type:"select", options:["否","是"], def:"否", showIf:routineOnly},
         {type:"heading", text:"讨论与建议事项", showIf:routineOnly},
         {name:"proposal", label:"提议 Proposal", type:"textarea", full:true, showIf:routineOnly, placeholder:"本次会议提出的议案 / 建议"},
         {name:"second", label:"附议 Second", type:"textarea", full:true, showIf:routineOnly, placeholder:"附议人及附议内容"},
@@ -63,12 +73,20 @@
         var keys = MODULES.meetings.reportSections.map(function(s){ return s.key; });
         var filled = keys.filter(function(k){ return r[k]; }).length;
         var color = filled === keys.length ? "good" : (filled === 0 ? "neutral" : "warn");
-        return { text: filled+"/"+keys.length+" 已填写", color: color };
+        var needTrack = MODULES.meetings.reportSections.filter(function(s){ return r[s.trackKey] === "是"; }).length;
+        var text = filled+"/"+keys.length+" 已填写";
+        if(needTrack){ text += " · 需追踪 "+needTrack; color = "warn"; }
+        return { text: text, color: color };
       },
       secondaryBadge:function(r){
         var count = (STATE.trackers||[]).filter(function(t){ return t.meetingRef === r.id; }).length;
         if(!count) return null;
         return { text: count+" 项追踪", color:"accent" };
+      },
+      extraActions:function(r){
+        var needTrack = MODULES.meetings.reportSections.filter(function(s){ return r[s.trackKey] === "是"; }).length;
+        if(!needTrack) return [];
+        return [{ label:"查看追踪 ("+needTrack+")", onclick:"app.setView('trackers')" }];
       },
       metaLines:function(r){
         var head = [r.date, r.time, r.venue].filter(Boolean).join(" · ");
@@ -441,6 +459,10 @@
     if(r.docLink){
       docLinkHtml = '<div class="card-attachment"><a class="btn btn-ghost btn-sm" href="'+esc(r.docLink)+'" target="_blank" rel="noopener noreferrer">📄 打开文档链接</a></div>';
     }
+    var extraActions = mod.extraActions ? mod.extraActions(r) : [];
+    var extraActionsHtml = extraActions.map(function(a){
+      return '<button class="btn btn-ghost btn-sm" onclick="'+a.onclick+'">'+esc(a.label)+'</button>';
+    }).join("");
     return '<div class="card" style="--card-color:var(--'+colorKey+')">'
       + '<div class="card-top"><span class="card-id num">'+esc(r.id)+'</span><div class="card-top-chips">'+badge+extraChip+secondaryChip+'<span class="chip chip-'+colorKey+'">'+esc(r.status||"")+'</span></div></div>'
       + '<h3 class="card-title">'+esc(r[mod.titleField] || "(未命名)")+'</h3>'
@@ -448,9 +470,32 @@
       + docLinkHtml
       + attachHtml
       + '<div class="card-actions">'
+      + extraActionsHtml
       + '<button class="btn btn-ghost btn-sm" onclick="app.openModal(\''+mod.key+'\',\''+r.id+'\')" '+wd+'>编辑</button>'
       + '<button class="btn btn-danger btn-sm" onclick="app.requestDelete(\''+mod.key+'\',\''+r.id+'\')" '+wd+'>删除</button>'
       + '</div></div>';
+  }
+
+  function getFlaggedTrackItems(){
+    var items = [];
+    (STATE.meetings||[]).forEach(function(m){
+      if(m.meetingType === "检讨会议") return;
+      MODULES.meetings.reportSections.forEach(function(s){
+        if(m[s.trackKey] !== "是") return;
+        var dept = s.short + "部门";
+        var already = (STATE.trackers||[]).some(function(t){ return t.meetingRef === m.id && t.department === dept; });
+        if(already) return;
+        items.push({
+          meetingId: m.id,
+          meetingTitle: m.title || m.id,
+          meetingDate: m.date || "",
+          dept: dept,
+          deptShort: s.short,
+          sectionText: m[s.key] || ""
+        });
+      });
+    });
+    return items;
   }
 
   function getFiltered(moduleKey){
@@ -460,6 +505,24 @@
     return arr.filter(function(r){
       return Object.keys(r).some(function(k){ return String(r[k]||"").toLowerCase().indexOf(q) > -1; });
     });
+  }
+
+  function renderFlaggedPanel(){
+    var wd = writeDisabled();
+    var items = getFlaggedTrackItems();
+    if(!items.length) return "";
+    var rows = items.map(function(i){
+      return '<div class="flagged-row">'
+        + '<div class="flagged-info"><strong>'+esc(i.dept)+'</strong><span class="flagged-meeting">来自会议：'+esc(i.meetingTitle)+(i.meetingDate?(" · "+esc(i.meetingDate)):"")+'</span>'
+        + (i.sectionText ? '<p class="flagged-text">'+esc(i.sectionText)+'</p>' : '')
+        + '</div>'
+        + '<button class="btn btn-primary btn-sm" onclick="app.createTrackerFromFlag(\''+i.meetingId+'\',\''+esc(i.dept)+'\')" '+wd+'>生成追踪记录</button>'
+        + '</div>';
+    }).join("");
+    return '<div class="panel flagged-panel">'
+      + '<h3 class="panel-title">会议部门汇报标记为需要追踪 <span class="chip chip-warn">'+items.length+'</span></h3>'
+      + '<div class="flagged-list">'+rows+'</div>'
+      + '</div>';
   }
 
   function renderModuleView(moduleKey){
@@ -472,6 +535,7 @@
       + '<input class="input search-input" type="text" placeholder="搜索'+esc(mod.label)+'…" value="'+esc(UI.search[moduleKey]||"")+'" oninput="app.setSearch(\''+moduleKey+'\', this.value)">'
       + '<button class="btn btn-primary" onclick="app.openModal(\''+moduleKey+'\', null)" '+wd+'>+ 新建'+esc(mod.singular)+'</button>'
       + '</div></div>'
+      + (moduleKey === "trackers" ? renderFlaggedPanel() : "")
       + (list.length
           ? '<div class="card-grid">' + list.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
           : '<div class="empty-state">'+esc(mod.emptyText)+'</div>');
@@ -538,7 +602,14 @@
 
   function setView(key){ UI.view = key; UI.modal = null; UI.confirmDelete = null; render(); }
   function setSearch(moduleKey, value){ UI.search[moduleKey] = value; render(); }
-  function openModal(moduleKey, id){ UI.modal = {module:moduleKey, id: id || null}; render(); }
+  function openModal(moduleKey, id, draft){ UI.modal = {module:moduleKey, id: id || null, draft: draft || null}; render(); }
+
+  function createTrackerFromFlag(meetingId, dept){
+    var m = STATE.meetings.find(function(x){ return x.id === meetingId; });
+    var section = m ? MODULES.meetings.reportSections.find(function(s){ return (s.short+"部门") === dept; }) : null;
+    var issue = section && m[section.key] ? (dept+"追踪："+m[section.key]).slice(0,120) : (dept+"追踪事项（来自会议 "+(m ? (m.title||meetingId) : meetingId)+"）");
+    openModal("trackers", null, { department: dept, issue: issue, meetingRef: meetingId });
+  }
   function closeModal(){ UI.modal = null; render(); }
   function requestDelete(moduleKey, id){ UI.confirmDelete = {module:moduleKey, id:id}; render(); }
   function cancelDelete(){ UI.confirmDelete = null; render(); }
@@ -725,7 +796,7 @@
     requestDelete: requestDelete, cancelDelete: cancelDelete, confirmDeleteNow: confirmDeleteNow,
     submitForm: submitForm, onMeetingTypeChange: onMeetingTypeChange,
     handleFileSelect: handleFileSelect, removeAttachment: removeAttachment, downloadAttachment: downloadAttachment,
-    submitLogin: submitLogin
+    submitLogin: submitLogin, createTrackerFromFlag: createTrackerFromFlag
   };
 
   if(document.readyState === "loading"){
