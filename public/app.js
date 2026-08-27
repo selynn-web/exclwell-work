@@ -163,7 +163,9 @@
     "来源会议：": {en:"Source Meeting: ", ms:"Mesyuarat Sumber: "},
     "负责人：": {en:"Owner: ", ms:"Bertanggungjawab: "},
     "预计完成：": {en:"Due: ", ms:"Tarikh Siap: "},
+    "进度备注：": {en:"Progress Notes: ", ms:"Catatan Kemajuan: "},
     "暂无追踪事项。可以在会议记录里发现需要跟进的事，来这里新建并关联对应会议。": {en:"No tracked items yet. Flag something that needs follow-up in Meeting Minutes, then create and link it to that meeting here.", ms:"Belum ada item dijejak. Tandakan perkara yang perlu disusuli dalam Minit Mesyuarat, kemudian cipta dan kaitkan dengan mesyuarat berkenaan di sini."},
+    "WhatsApp 提醒": {en:"WhatsApp Reminder", ms:"Peringatan WhatsApp"},
 
     // inspections module
     "检验记录": {en:"Inspection Records", ms:"Rekod Pemeriksaan"},
@@ -579,6 +581,25 @@
         {name:"sourceItem", type:"hidden"}
       ],
       statusColors:{"待处理":"warn","进行中":"accent","已完成":"good","已延误":"seal"},
+      extraBadge:function(r){
+        var info = trackerReminderInfo(r);
+        if(!info) return null;
+        if(info.overdue){
+          var overdueText = info.days != null
+            ? T3("已延误 "+info.days+" 天", "Overdue by "+info.days+" day"+(info.days===1?"":"s"), "Tertunggak "+info.days+" hari")
+            : T("已延误");
+          return { text: "⏰ "+overdueText, color:"seal" };
+        }
+        var dueText = info.days === 0
+          ? T3("今天到期", "Due today", "Tamat tempoh hari ini")
+          : T3(info.days+" 天后到期", "Due in "+info.days+" day"+(info.days===1?"":"s"), "Tamat tempoh dalam "+info.days+" hari");
+        return { text: "⏰ "+dueText, color:"warn" };
+      },
+      extraActions:function(r){
+        var info = trackerReminderInfo(r);
+        if(!info) return [];
+        return [{ label:"📱 "+T("WhatsApp 提醒"), onclick:"app.sendWhatsAppReminder('trackers','"+r.id+"')" }];
+      },
       metaLines:function(r){
         var lines = [r.department ? T("部门：")+T(r.department) : ""];
         if(r.meetingRef){
@@ -986,6 +1007,116 @@
     var countLine = '<p style="color:#666; font-size:9pt;">'+esc(T3("共 ","Total ","Jumlah "))+list.length+esc(T3(" 条记录"," records"," rekod"))+'</p>';
     var bodyHtml = '<h1 style="font-size:18pt;">'+esc(title)+'</h1>' + countLine + sections;
     downloadWordDoc(safeFilename(moduleKey+"_export")+".doc", wrapWordHtml(title, bodyHtml));
+  }
+
+  /* --- WhatsApp reminders for tracker items ------------------------------
+     Click-to-send: builds a wa.me deep link with a pre-filled message and
+     opens it in a new tab. This does NOT send anything automatically — the
+     person still reviews and taps Send inside WhatsApp themselves. That
+     keeps it free and instant, with no WhatsApp Business API / Twilio
+     account, no approval process, and no per-message cost. The phone
+     number is looked up automatically from 人员管理 (Staff) by matching the
+     tracker's "负责人" (owner) name against a staff record's name, reading
+     that staff member's "联系方式" (contact) field. */
+
+  function trackerReminderInfo(r){
+    if(!r || r.status === "已完成") return null;
+    var days = null;
+    if(r.dueDate){
+      var due = new Date(r.dueDate+"T00:00:00");
+      if(!isNaN(due.getTime())){
+        var today = new Date(); today.setHours(0,0,0,0);
+        days = Math.round((due-today)/86400000);
+      }
+    }
+    var overdue = (r.status === "已延误") || (days !== null && days < 0);
+    if(overdue) return { overdue:true, days: days !== null ? Math.abs(days) : null };
+    if(days !== null && days <= 3) return { overdue:false, days:days };
+    return null;
+  }
+
+  function findStaffContact(name){
+    var n = String(name || "").trim();
+    if(!n) return null;
+    var matches = (STATE.staff || []).filter(function(s){ return String(s.name || "").trim() === n; });
+    if(!matches.length) return null;
+    matches.sort(function(a, b){
+      var aa = a.status === "在职" ? 0 : 1;
+      var bb = b.status === "在职" ? 0 : 1;
+      return aa - bb;
+    });
+    return matches[0].contact || null;
+  }
+
+  function extractPhoneCandidate(raw){
+    var text = String(raw || "");
+    var matches = text.match(/[\d+][\d\s\-]{5,}\d/g) || [];
+    var best = null, bestLen = 0;
+    matches.forEach(function(m){
+      var digits = m.replace(/\D+/g, "");
+      if(digits.length > bestLen){ bestLen = digits.length; best = m; }
+    });
+    return best;
+  }
+
+  function normalizeMsPhone(raw){
+    var candidate = extractPhoneCandidate(raw);
+    if(!candidate) return null;
+    var digits = candidate.replace(/\D+/g, "");
+    if(digits.length < 7) return null;
+    var hasPlus = candidate.trim().charAt(0) === "+";
+    if(hasPlus || digits.length >= 11) return digits;
+    if(digits.charAt(0) === "0") return "60" + digits.slice(1);
+    return "60" + digits;
+  }
+
+  function trackerReminderMessage(r){
+    var lines = [];
+    lines.push(T3("提醒：", "Reminder: ", "Peringatan: ") + (r.issue || T("追踪事项")));
+    if(r.department) lines.push(T("部门：") + T(r.department));
+    if(r.dueDate) lines.push(T("预计完成：") + r.dueDate);
+    if(r.notes) lines.push(T("进度备注：") + r.notes);
+    lines.push(T3(
+      "—— 来自团队档案台的提醒草稿，请核对后发送。",
+      "— Draft reminder from Team Archive. Please review before sending.",
+      "— Draf peringatan daripada Team Archive. Sila semak sebelum menghantar."
+    ));
+    return lines.filter(Boolean).join("\n");
+  }
+
+  function sendWhatsAppReminder(moduleKey, id){
+    var r = (STATE[moduleKey] || []).find(function(x){ return x.id === id; });
+    if(!r){ toast(T("找不到记录")); return; }
+    var ownerName = String(r.owner || "").trim();
+    if(!ownerName){
+      toast(T3(
+        "请先在这条追踪事项里填写\"负责人\"姓名",
+        "Please fill in an \"Owner\" name on this tracked item first",
+        "Sila isi nama \"Bertanggungjawab\" pada item ini dahulu"
+      ));
+      return;
+    }
+    var contactRaw = findStaffContact(ownerName);
+    if(!contactRaw){
+      toast(T3(
+        "未在人员管理中找到“" + ownerName + "”的联系方式，请先在人员管理里补上",
+        "Could not find a contact number for “" + ownerName + "” in Staff — please add one there first",
+        "Tidak jumpa nombor untuk “" + ownerName + "” dalam Pengurusan Kakitangan — sila tambah dahulu"
+      ));
+      return;
+    }
+    var phone = normalizeMsPhone(contactRaw);
+    if(!phone){
+      toast(T3(
+        "“" + ownerName + "”的联系方式无法识别为电话号码，请检查人员管理里的“联系方式”字段",
+        "Could not recognize a phone number in “" + ownerName + "”'s contact info — please check the Staff “Contact” field",
+        "Tidak dapat mengecam nombor telefon dalam maklumat hubungan “" + ownerName + "” — sila semak medan “Hubungan” dalam Pengurusan Kakitangan"
+      ));
+      return;
+    }
+    var text = trackerReminderMessage(r);
+    var url = "https://wa.me/" + phone + "?text=" + encodeURIComponent(text);
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   function renderItemRow(item){
@@ -1842,7 +1973,8 @@
     addTeammate: addTeammate, removeTeammate: removeTeammate,
     togglePermEdit: togglePermEdit, savePermissions: savePermissions,
     setLang: setLang,
-    exportRecord: exportRecord, exportModule: exportModule
+    exportRecord: exportRecord, exportModule: exportModule,
+    sendWhatsAppReminder: sendWhatsAppReminder
   };
 
   if(document.readyState === "loading"){
