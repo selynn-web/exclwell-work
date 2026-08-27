@@ -168,6 +168,15 @@
   .flagged-meeting{font-size:.8rem; color:var(--ink-dim); margin-left:4px;}
   .flagged-text{margin:3px 0 0; font-size:.78rem; color:var(--ink-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:440px;}
 
+  .item-list-field{display:flex; flex-direction:column; gap:8px;}
+  .item-list{display:flex; flex-direction:column; gap:8px;}
+  .item-row{display:flex; gap:10px; align-items:flex-start; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 10px;}
+  .item-row .item-text{flex:1; min-height:44px;}
+  .item-track-toggle{display:flex; align-items:center; gap:6px; font-size:.78rem; color:var(--ink-dim); white-space:nowrap; padding-top:9px;}
+  .item-track-toggle input{margin:0;}
+  .item-remove{flex-shrink:0; margin-top:2px;}
+  .item-add-btn{align-self:flex-start;}
+
   .overlay{position:fixed; inset:0; background:rgba(20,19,16,0.44); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50;}
   .modal{background:var(--surface); border-radius:var(--radius-lg); padding:26px 28px; width:100%; max-width:580px; max-height:88vh; overflow-y:auto; box-shadow:var(--shadow);}
   .modal-sm{max-width:400px;}
