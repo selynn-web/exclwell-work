@@ -220,6 +220,14 @@
   .login-toggle{margin-top:14px; background:none; border:none; color:var(--accent); font-size:.8rem; cursor:pointer; text-decoration:underline; padding:4px;}
   .app-loading{position:fixed; inset:0; background:var(--paper); display:flex; align-items:center; justify-content:center; color:var(--ink-faint); font-size:.9rem;}
 
+  /* ---- language switcher (中文 / EN / BM) ---- */
+  .lang-switch{display:flex; gap:4px;}
+  .lang-btn{background:none; border:1px solid var(--line); border-radius:999px; color:var(--ink-dim); font-size:.72rem; font-weight:600; padding:3px 10px; cursor:pointer; letter-spacing:.02em;}
+  .lang-btn:hover{border-color:var(--accent);}
+  .lang-btn-active{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .lang-switch-sidebar{padding:10px 8px 4px; flex-shrink:0;}
+  .lang-switch-login{justify-content:center; margin-bottom:14px;}
+
   /* ---- accounts / audit ---- */
   .current-user{font-size:.8rem; color:var(--ink-dim); font-weight:600; margin-right:10px; align-self:center;}
   .add-teammate-form{display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
