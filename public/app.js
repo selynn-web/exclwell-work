@@ -328,6 +328,8 @@
     "团队邀请码": {en:"Team invite code", ms:"Kod jemputan pasukan"},
     "用户名": {en:"Username", ms:"Nama Pengguna"},
     "初始密码（至少 4 位）": {en:"Initial Password (min. 4 chars)", ms:"Kata Laluan Awal (min. 4 aksara)"},
+    "手机号码（可选，用于 WhatsApp 提醒）": {en:"Phone number (optional, used for WhatsApp reminders)", ms:"Nombor telefon (pilihan, untuk peringatan WhatsApp)"},
+    "手机号码：": {en:"Phone: ", ms:"Telefon: "},
     "限制这个人只能看到（不勾选 = 不限制，全部可见）：": {en:"Restrict this person to only see (leave unchecked = unrestricted, all visible):", ms:"Hadkan orang ini supaya hanya boleh lihat (jangan tandakan = tiada had, semua boleh lihat):"},
     "添加": {en:"Add", ms:"Tambah"},
     "你的账号没有账号管理的权限。": {en:"Your account doesn't have permission to manage accounts.", ms:"Akaun anda tiada kebenaran untuk mengurus akaun."},
@@ -761,6 +763,11 @@
   var MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
   var CURRENT_USER = null;
   var ACCOUNTS = { list:null, loading:false, error:null, editingId:null };
+  // Lightweight {name, phone} directory from every account that has a phone
+  // set, refreshed alongside the normal state poll. Available to any logged
+  // -in teammate (unlike the full ACCOUNTS list, which needs 账号管理
+  // access) so anyone can send a WhatsApp reminder to a tracker's owner.
+  var CONTACTS = [];
 
   function defaultState(){
     return {
@@ -1048,6 +1055,22 @@
     return matches[0].contact || null;
   }
 
+  function findAccountPhone(name){
+    var n = String(name || "").trim();
+    if(!n) return null;
+    var match = (CONTACTS || []).find(function(c){ return String(c.name || "").trim() === n; });
+    return match ? match.phone : null;
+  }
+
+  // Checks both possible places a phone number could have been entered:
+  // the person's own login account (账号管理 → 编辑权限, the quicker path
+  // since every team member already has one), and the 人员管理 staff
+  // record with a matching name (the original path, for people tracked in
+  // Staff who may not have — or need — a login account).
+  function findOwnerPhone(name){
+    return findAccountPhone(name) || findStaffContact(name);
+  }
+
   function extractPhoneCandidate(raw){
     var text = String(raw || "");
     var matches = text.match(/[\d+][\d\s\-]{5,}\d/g) || [];
@@ -1096,21 +1119,21 @@
       ));
       return;
     }
-    var contactRaw = findStaffContact(ownerName);
+    var contactRaw = findOwnerPhone(ownerName);
     if(!contactRaw){
       toast(T3(
-        "未在人员管理中找到“" + ownerName + "”的联系方式，请先在人员管理里补上",
-        "Could not find a contact number for “" + ownerName + "” in Staff — please add one there first",
-        "Tidak jumpa nombor untuk “" + ownerName + "” dalam Pengurusan Kakitangan — sila tambah dahulu"
+        "找不到“" + ownerName + "”的手机号码，请在账号管理（编辑权限）或人员管理里给这个人补上手机号码 / 联系方式",
+        "Could not find a phone number for “" + ownerName + "” — please add one either in Account Management (Edit Permissions) or in Staff",
+        "Tidak jumpa nombor telefon untuk “" + ownerName + "” — sila tambah dalam Pengurusan Akaun (Edit Kebenaran) atau Pengurusan Kakitangan"
       ));
       return;
     }
     var phone = normalizeMsPhone(contactRaw);
     if(!phone){
       toast(T3(
-        "“" + ownerName + "”的联系方式无法识别为电话号码，请检查人员管理里的“联系方式”字段",
-        "Could not recognize a phone number in “" + ownerName + "”'s contact info — please check the Staff “Contact” field",
-        "Tidak dapat mengecam nombor telefon dalam maklumat hubungan “" + ownerName + "” — sila semak medan “Hubungan” dalam Pengurusan Kakitangan"
+        "“" + ownerName + "”的手机号码格式无法识别，请检查账号管理或人员管理里填的号码",
+        "Could not recognize “" + ownerName + "”'s phone number format — please check the number entered in Account Management or Staff",
+        "Format nombor telefon “" + ownerName + "” tidak dapat dikenali — sila semak nombor dalam Pengurusan Akaun atau Pengurusan Kakitangan"
       ));
       return;
     }
@@ -1563,6 +1586,7 @@
         var editing = ACCOUNTS.editingId === u.id;
         var editPanel = editing
           ? '<form class="perm-edit-form" onsubmit="app.savePermissions(event,\''+u.id+'\')">'
+            + '<input class="input" type="text" name="perm_phone" placeholder="'+esc(T("手机号码（可选，用于 WhatsApp 提醒）"))+'" value="'+esc(u.phone||"")+'" style="margin-bottom:10px;">'
             + renderModuleCheckboxes("perm_", u.allowedModules)
             + '<p class="external-desc" style="margin:8px 0;">'+esc(T("一个都不勾 = 不限制，可看到全部模块。"))+'</p>'
             + '<div class="card-actions">'
@@ -1573,7 +1597,7 @@
         return '<div class="card">'
           + '<div class="card-top"><span class="card-id num">@'+esc(u.username)+'</span>'+(isMe?'<span class="chip chip-accent">'+esc(T("我"))+'</span>':'')+'</div>'
           + '<h3 class="card-title">'+esc(u.name)+'</h3>'
-          + '<div class="card-meta"><p>'+(u.createdAt?(esc(T("加入时间："))+esc(u.createdAt.slice(0,10))):"")+'</p><p>'+esc(permSummary)+'</p></div>'
+          + '<div class="card-meta"><p>'+(u.createdAt?(esc(T("加入时间："))+esc(u.createdAt.slice(0,10))):"")+'</p><p>'+esc(permSummary)+'</p>'+(u.phone?('<p>'+esc(T("手机号码："))+esc(u.phone)+'</p>'):'')+'</div>'
           + (editing ? editPanel : (
               '<div class="card-actions">'
               + '<button class="btn btn-ghost btn-sm" onclick="app.togglePermEdit(\''+u.id+'\')" '+wd+'>'+esc(T("编辑权限"))+'</button>'
@@ -1592,6 +1616,7 @@
       + '<input class="input" type="text" name="name" placeholder="'+esc(T("姓名"))+'">'
       + '<input class="input" type="text" name="username" placeholder="'+esc(T("用户名"))+'">'
       + '<input class="input" type="password" name="password" placeholder="'+esc(T("初始密码（至少 4 位）"))+'" autocomplete="new-password">'
+      + '<input class="input" type="text" name="phone" placeholder="'+esc(T("手机号码（可选，用于 WhatsApp 提醒）"))+'" autocomplete="tel">'
       + '<p class="external-desc" style="margin:10px 0 4px;">'+esc(T("限制这个人只能看到（不勾选 = 不限制，全部可见）："))+'</p>'
       + renderModuleCheckboxes("new_", [])
       + '<button type="submit" class="btn btn-primary" '+wd+'>'+esc(T("添加"))+'</button>'
@@ -1614,6 +1639,7 @@
       name: form.elements["name"].value,
       username: form.elements["username"].value,
       password: form.elements["password"].value,
+      phone: form.elements["phone"].value,
       allowedModules: collectCheckedModules(form, "new_")
     };
     var btn = form.querySelector('button[type="submit"]');
@@ -1633,6 +1659,7 @@
       form.reset();
       if(btn) btn.disabled = false;
       fetchAccounts();
+      refreshContacts();
     }).catch(function(err){
       if(err && err.message === "__unauthorized__") return;
       toast(T(err.message) || T("添加失败，请重试"));
@@ -1644,12 +1671,13 @@
     e.preventDefault();
     var form = e.target;
     var allowedModules = collectCheckedModules(form, "perm_");
+    var phone = form.elements["perm_phone"] ? form.elements["perm_phone"].value : undefined;
     var btn = form.querySelector('button[type="submit"]');
     if(btn) btn.disabled = true;
     fetch("/api/users", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({op:"setPermissions", id:id, allowedModules:allowedModules})
+      body: JSON.stringify({op:"setPermissions", id:id, allowedModules:allowedModules, phone:phone})
     }).then(function(res){
       if(res.status === 401){ showLogin("登录已过期，请重新输入密码。"); throw new Error("__unauthorized__"); }
       return res.json().catch(function(){ return {}; }).then(function(json){
@@ -1660,6 +1688,7 @@
       toast(T("已更新权限"));
       ACCOUNTS.editingId = null;
       fetchAccounts();
+      refreshContacts();
     }).catch(function(err){
       if(err && err.message === "__unauthorized__") return;
       toast(T(err.message) || T("保存失败，请重试"));
@@ -1832,12 +1861,22 @@
     });
   }
 
+  // CONTACTS otherwise only refreshes on the 20s poll — call this right
+  // after adding a teammate or saving their phone number in 账号管理 so a
+  // WhatsApp reminder can find it immediately instead of up to 20s later.
+  function refreshContacts(){
+    fetchState().then(function(json){
+      if(json && Array.isArray(json.contacts)) CONTACTS = json.contacts;
+    }).catch(function(){});
+  }
+
   function pollState(){
     if(UI && UI.modal) return; // don't disrupt someone mid-edit
     fetchState().then(function(json){
       if(!json) return;
       applyServerState(json.state);
       if(json.user) CURRENT_USER = json.user;
+      if(Array.isArray(json.contacts)) CONTACTS = json.contacts;
       if(UI && !isModuleAllowed(UI.view)) UI.view = "overview";
       render();
     }).catch(function(){});
@@ -1953,6 +1992,7 @@
       }
       applyServerState(json.state);
       if(json.user) CURRENT_USER = json.user;
+      if(Array.isArray(json.contacts)) CONTACTS = json.contacts;
       mode = "writer";
       render();
       if(pollTimer) clearInterval(pollTimer);

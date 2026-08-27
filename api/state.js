@@ -57,7 +57,17 @@ module.exports = async function handler(req, res) {
       VALID_MODULES.forEach(function (k) {
         if (!auth.canAccess(me, k)) current[k] = [];
       });
-      res.status(200).json({ state: current, user: me });
+      // A lightweight name+phone directory, available to every logged-in
+      // teammate regardless of module permissions (unlike the full account
+      // list behind 账号管理/"accounts"). Used so anyone working a tracker
+      // item can send a WhatsApp reminder to whoever it's assigned to,
+      // without needing account-management access themselves. Only name
+      // and phone are exposed here — never username/password/permissions.
+      var allUsers = await auth.getUsers();
+      var contacts = allUsers
+        .filter(function (u) { return !u.deleted && u.phone; })
+        .map(function (u) { return { name: u.name, phone: u.phone }; });
+      res.status(200).json({ state: current, user: me, contacts: contacts });
       return;
     }
 

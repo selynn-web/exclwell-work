@@ -39,6 +39,7 @@ module.exports = async function handler(req, res) {
           id: u.id,
           name: u.name,
           username: u.username,
+          phone: u.phone || "",
           createdAt: u.createdAt,
           allowedModules: Array.isArray(u.allowedModules) ? u.allowedModules : null,
         };
@@ -73,6 +74,7 @@ module.exports = async function handler(req, res) {
           return;
         }
         var allowedModules = sanitizeAllowedModules(body.allowedModules);
+        var phone = String(body.phone || "").trim().slice(0, 40);
         var passwordHash = auth.hashPassword(password);
         try {
           await db.kvUpdate(auth.USERS_KEY, function (raw) {
@@ -89,6 +91,7 @@ module.exports = async function handler(req, res) {
               username: username,
               passwordHash: passwordHash,
               allowedModules: allowedModules,
+              phone: phone,
               createdAt: new Date().toISOString(),
             });
             return { value: users };
@@ -113,12 +116,16 @@ module.exports = async function handler(req, res) {
           res.status(400).json({ error: "bad_request", message: "不能取消自己的账号管理权限，请让其他同事帮你调整" });
           return;
         }
+        var patch = { allowedModules: nextAllowed };
+        if (Object.prototype.hasOwnProperty.call(body, "phone")) {
+          patch.phone = String(body.phone || "").trim().slice(0, 40);
+        }
         var permResult = await db.kvUpdate(auth.USERS_KEY, function (raw) {
           var users = Array.isArray(raw) ? raw.slice() : [];
           var idx = users.findIndex(function (u) { return u.id === body.id && !u.deleted; });
           if (idx === -1) return { value: users, found: false };
           var next = users.slice();
-          next[idx] = Object.assign({}, next[idx], { allowedModules: nextAllowed });
+          next[idx] = Object.assign({}, next[idx], patch);
           return { value: next, found: true };
         });
         if (!permResult.found) {
