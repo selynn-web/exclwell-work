@@ -1949,9 +1949,28 @@
       headers:{"Content-Type":"application/json"},
       body: JSON.stringify(payload)
     }).then(function(res){
-      if(res.status === 401 && !form.elements["teamPin"].value){ showLogin("登录已过期，请重新输入密码。"); throw new Error("__unauthorized__"); }
       return res.json().catch(function(){ return {}; }).then(function(json){
-        if(!res.ok) throw new Error(json.message || "添加失败，请检查邀请码是否正确");
+        // A 401 here can mean two very different things that both happen to
+        // share the same HTTP status: the admin's own login session expired
+        // (json.error === "unauthorized", set by the top-of-handler auth
+        // check), or — much more commonly — the team invite code typed into
+        // THIS form was left blank or doesn't match (json.error ===
+        // "wrong_pin", from the "add" op's own check). Only the first one is
+        // an actual session problem; conflating the two used to bounce the
+        // admin's whole session back to the login screen (looking like a
+        // crash) just for leaving the invite-code field empty, even though
+        // they were still logged in the whole time. Branch on the server's
+        // error code, not on whether the field happens to be empty.
+        if(res.status === 401 && json.error === "unauthorized"){
+          showLogin("登录已过期，请重新输入密码。");
+          throw new Error("__unauthorized__");
+        }
+        if(!res.ok){
+          var msg = json.error === "wrong_pin"
+            ? T3("团队邀请码不对，请检查后重试", "Incorrect team invite code, please check and try again", "Kod jemputan pasukan salah, sila semak dan cuba lagi")
+            : (json.message || "添加失败，请检查邀请码是否正确");
+          throw new Error(msg);
+        }
         return json;
       });
     }).then(function(){
