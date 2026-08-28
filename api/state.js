@@ -17,6 +17,7 @@ const MODULE_PREFIX = {
   damages: "DMG",
   trackers: "TRK",
   repairs: "RPR",
+  vehicles: "VEH",
   inspections: "INS",
   complaints: "CPL",
   calibrations: "CAL",

@@ -18,7 +18,7 @@ var USERS_KEY = "team-archive:users";
 // external link; overview is filtered down to whatever the user can see).
 var RESTRICTABLE_MODULES = [
   "meetings", "sops", "inspections", "complaints", "calibrations", "repairs", "traces",
-  "damages", "trackers", "accounts"
+  "vehicles", "damages", "trackers", "accounts"
 ];
 
 // A user's `allowedModules` is either null/undefined (full access, the

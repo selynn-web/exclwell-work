@@ -261,6 +261,24 @@
     "出货批号：": {en:"Shipment Batches: ", ms:"Kelompok Penghantaran: "},
     "暂无批次追溯记录，点击\"新建追溯记录\"登记原料到出货的批号对应关系。": {en:"No trace records yet. Click \"New Trace Record\" to log the raw-material-to-shipment batch mapping.", ms:"Belum ada rekod jejak. Klik \"Rekod Jejak Baharu\" untuk mendaftar pemetaan kelompok bahan mentah ke penghantaran."},
 
+    // vehicles module
+    "汽车管理": {en:"Vehicle Management", ms:"Pengurusan Kenderaan"},
+    "车辆": {en:"Vehicle", ms:"Kenderaan"},
+    "车牌号码": {en:"Plate Number", ms:"Nombor Plat"},
+    "车型": {en:"Model", ms:"Model"},
+    "使用部门": {en:"Department", ms:"Jabatan"},
+    "司机 / 使用人": {en:"Driver / User", ms:"Pemandu / Pengguna"},
+    "司机 / 使用人：": {en:"Driver / User: ", ms:"Pemandu / Pengguna: "},
+    "负责人（WhatsApp 提醒对象）": {en:"Responsible Person (WhatsApp reminder contact)", ms:"Orang Bertanggungjawab (kenalan peringatan WhatsApp)"},
+    "路税到期日": {en:"Road Tax Expiry", ms:"Tamat Tempoh Cukai Jalan"},
+    "路税到期：": {en:"Road Tax Due: ", ms:"Cukai Jalan Tamat: "},
+    "保险到期日": {en:"Insurance Expiry", ms:"Tamat Tempoh Insurans"},
+    "保险到期：": {en:"Insurance Due: ", ms:"Insurans Tamat: "},
+    "保险公司": {en:"Insurer", ms:"Syarikat Insurans"},
+    "使用中": {en:"In Use", ms:"Sedang Digunakan"},
+    "已停用": {en:"Decommissioned", ms:"Tidak Digunakan Lagi"},
+    "暂无车辆记录，点击\"新建车辆\"登记公司车辆的路税与保险到期日，系统会自动提示即将到期或已逾期的车辆。": {en:"No vehicle records yet. Click \"New Vehicle\" to log a company vehicle's road tax and insurance expiry dates — the system will flag vehicles that are due soon or overdue.", ms:"Belum ada rekod kenderaan. Klik \"Kenderaan Baharu\" untuk mendaftar tarikh tamat tempoh cukai jalan dan insurans kenderaan syarikat — sistem akan menanda kenderaan yang akan atau telah tamat tempoh."},
+
     // nav / general / shell
     "总览": {en:"Overview", ms:"Ringkasan"},
     "尚无记录": {en:"No records yet", ms:"Belum ada rekod"},
@@ -607,6 +625,11 @@
         if(!info) return [];
         return [{ label:"📱 "+T("WhatsApp 提醒"), onclick:"app.sendWhatsAppReminder('trackers','"+r.id+"')" }];
       },
+      // WhatsApp reminders are generalized across modules (see
+      // sendWhatsAppReminder): reminderOwnerField defaults to "owner" so
+      // trackers doesn't need to set it explicitly; reminderMessage builds
+      // the draft text for this module specifically.
+      reminderMessage:function(r){ return trackerReminderMessage(r); },
       metaLines:function(r){
         var lines = [r.department ? T("部门：")+T(r.department) : ""];
         if(r.meetingRef){
@@ -768,9 +791,43 @@
         ].filter(Boolean);
       },
       emptyText:'暂无批次追溯记录，点击"新建追溯记录"登记原料到出货的批号对应关系。'
+    },
+    vehicles:{
+      key:"vehicles", label:"汽车管理", singular:"车辆", idPrefix:"VEH", titleField:"plateNo",
+      fields:[
+        {name:"plateNo", label:"车牌号码", type:"text", required:true},
+        {name:"model", label:"车型", type:"text"},
+        {name:"department", label:"使用部门", type:"select", options:DEPARTMENTS, def:"大豆部门"},
+        {name:"driver", label:"司机 / 使用人", type:"text"},
+        {name:"responsible", label:"负责人（WhatsApp 提醒对象）", type:"text"},
+        {name:"roadTaxExpiry", label:"路税到期日", type:"date", required:true},
+        {name:"insuranceExpiry", label:"保险到期日", type:"date", required:true},
+        {name:"insurer", label:"保险公司", type:"text"},
+        {name:"notes", label:"备注", type:"textarea", full:true},
+        {name:"status", label:"状态", type:"select", options:["使用中","维修中","已停用"], def:"使用中"}
+      ],
+      statusColors:{"使用中":"good","维修中":"warn","已停用":"neutral"},
+      extraBadge:function(r){ return expiryBadge(r.roadTaxExpiry, "路税", "Road tax", "Cukai jalan"); },
+      secondaryBadge:function(r){ return expiryBadge(r.insuranceExpiry, "保险", "Insurance", "Insurans"); },
+      extraActions:function(r){
+        var actions = [];
+        if(vehicleReminderUrgent(r)) actions.push({ label:"📱 "+T("WhatsApp 提醒"), onclick:"app.sendWhatsAppReminder('vehicles','"+r.id+"')" });
+        return actions;
+      },
+      reminderOwnerField:"responsible",
+      reminderMessage:function(r){ return vehicleReminderMessage(r); },
+      metaLines:function(r){
+        return [
+          [r.model, r.department ? T(r.department) : ""].filter(Boolean).join(" · "),
+          r.driver ? T("司机 / 使用人：")+r.driver : "",
+          r.roadTaxExpiry ? T("路税到期：")+r.roadTaxExpiry : "",
+          r.insuranceExpiry ? T("保险到期：")+r.insuranceExpiry+(r.insurer?(" · "+r.insurer):"") : ""
+        ].filter(Boolean);
+      },
+      emptyText:'暂无车辆记录，点击"新建车辆"登记公司车辆的路税与保险到期日，系统会自动提示即将到期或已逾期的车辆。'
     }
   };
-  var NAV_ORDER = ["overview","meetings","sops","inspections","complaints","calibrations","repairs","traces","damages","trackers","leaves","accounts"];
+  var NAV_ORDER = ["overview","meetings","sops","inspections","complaints","calibrations","repairs","traces","vehicles","damages","trackers","leaves","accounts"];
   var LEAVE_APP_URL = "https://exclwell-leave-app.vercel.app/";
   var EXTERNAL_VIEWS = {
     leaves: { label:"请假管理", url: LEAVE_APP_URL, title:"请假申请已迁移至独立系统",
@@ -783,7 +840,7 @@
   // Modules an account can be restricted to a subset of — mirrors
   // api/_auth.js's RESTRICTABLE_MODULES. "overview" and "leaves" are
   // never restricted.
-  var RESTRICTABLE_MODULES = ["meetings","sops","inspections","complaints","calibrations","repairs","traces","damages","trackers","accounts"];
+  var RESTRICTABLE_MODULES = ["meetings","sops","inspections","complaints","calibrations","repairs","traces","vehicles","damages","trackers","accounts"];
   function moduleLabel(key){
     if(MODULES[key]) return T(MODULES[key].label);
     if(INTERNAL_VIEWS[key]) return T(INTERNAL_VIEWS[key].label);
@@ -821,16 +878,16 @@
       // keep round-tripping through this shape unchanged (see api/state.js
       // for the matching server-side note), and the WhatsApp-reminder phone
       // lookup still reads it as a fallback (see findStaffContact()).
-      meetings:[], sops:[], staff:[], damages:[], trackers:[], repairs:[],
+      meetings:[], sops:[], staff:[], damages:[], trackers:[], repairs:[], vehicles:[],
       inspections:[], complaints:[], calibrations:[], traces:[],
-      counters:{MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0}
+      counters:{MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0,VEH:0}
     };
   }
   function defaultUI(){
     var now = new Date();
     return {
       view:"overview",
-      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:"",repairs:""},
+      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:"",repairs:"",vehicles:""},
       modal:null, confirmDelete:null,
       repairsViewMode:"list",
       calendarCursor:{y:now.getFullYear(), m:now.getMonth()},
@@ -1096,6 +1153,63 @@
     return null;
   }
 
+  // Generic "N days overdue / N days until due" badge, shared by any module
+  // that tracks a due date on a record (currently 设备校准记录's own inline
+  // version, and 汽车管理's road-tax / insurance expiry — each vehicle has
+  // two independent due dates, so this needs to run twice per card).
+  function expiryBadge(dateStr, labelZh, labelEn, labelMs){
+    if(!dateStr) return null;
+    var due = new Date(dateStr+"T00:00:00");
+    if(isNaN(due.getTime())) return null;
+    var today = new Date(); today.setHours(0,0,0,0);
+    var days = Math.round((due-today)/86400000);
+    var text, color;
+    if(days < 0){
+      var abs = Math.abs(days);
+      text = T3(labelZh+"已逾期 "+abs+" 天", labelEn+" overdue by "+abs+" day"+(abs===1?"":"s"), labelMs+" tertunggak "+abs+" hari");
+      color = "seal";
+    } else {
+      text = T3(labelZh+" "+days+" 天后到期", labelEn+" due in "+days+" day"+(days===1?"":"s"), labelMs+" tamat tempoh dalam "+days+" hari");
+      color = days <= 14 ? "warn" : "good";
+    }
+    return { text: text, color: color };
+  }
+
+  function daysUntil(dateStr){
+    if(!dateStr) return null;
+    var due = new Date(dateStr+"T00:00:00");
+    if(isNaN(due.getTime())) return null;
+    var today = new Date(); today.setHours(0,0,0,0);
+    return Math.round((due-today)/86400000);
+  }
+
+  // Same trigger rule as trackers' WhatsApp reminder button: show it once
+  // either date is overdue or due within 3 days. A decommissioned vehicle
+  // never needs a reminder.
+  function vehicleReminderUrgent(r){
+    if(!r || r.status === "已停用") return false;
+    var rt = daysUntil(r.roadTaxExpiry);
+    var ins = daysUntil(r.insuranceExpiry);
+    return (rt !== null && rt <= 3) || (ins !== null && ins <= 3);
+  }
+
+  function vehicleReminderMessage(r){
+    var lines = [];
+    lines.push(T3("车辆提醒：", "Vehicle reminder: ", "Peringatan kenderaan: ") + (r.plateNo || T("车辆")) + (r.model ? " ("+r.model+")" : ""));
+    var rtBadge = expiryBadge(r.roadTaxExpiry, "路税", "Road tax", "Cukai jalan");
+    if(rtBadge) lines.push(rtBadge.text);
+    var insBadge = expiryBadge(r.insuranceExpiry, "保险", "Insurance", "Insurans");
+    if(insBadge) lines.push(insBadge.text);
+    if(r.department) lines.push(T("使用部门：") + T(r.department));
+    if(r.driver) lines.push(T("司机 / 使用人：") + r.driver);
+    lines.push(T3(
+      "—— 来自团队档案台的提醒草稿，请核对后发送。",
+      "— Draft reminder from Team Archive. Please review before sending.",
+      "— Draf peringatan daripada Team Archive. Sila semak sebelum menghantar."
+    ));
+    return lines.filter(Boolean).join("\n");
+  }
+
   function findStaffContact(name){
     var n = String(name || "").trim();
     if(!n) return null;
@@ -1161,15 +1275,23 @@
     return lines.filter(Boolean).join("\n");
   }
 
+  // Generalized across every module that offers a WhatsApp reminder button
+  // (currently trackers' due-date reminders and vehicles' road-tax /
+  // insurance expiry reminders): each module's config supplies which field
+  // holds the person's name (reminderOwnerField, default "owner") and how
+  // to build the draft message (reminderMessage(r)) — the phone lookup,
+  // number normalization, and click-to-send mechanics stay shared here.
   function sendWhatsAppReminder(moduleKey, id){
     var r = (STATE[moduleKey] || []).find(function(x){ return x.id === id; });
     if(!r){ toast(T("找不到记录")); return; }
-    var ownerName = String(r.owner || "").trim();
+    var mod = MODULES[moduleKey] || {};
+    var ownerField = mod.reminderOwnerField || "owner";
+    var ownerName = String(r[ownerField] || "").trim();
     if(!ownerName){
       toast(T3(
-        "请先在这条追踪事项里填写\"负责人\"姓名",
-        "Please fill in an \"Owner\" name on this tracked item first",
-        "Sila isi nama \"Bertanggungjawab\" pada item ini dahulu"
+        "请先在这条记录里填写\"负责人\"姓名",
+        "Please fill in an \"Owner\" name on this record first",
+        "Sila isi nama \"Bertanggungjawab\" pada rekod ini dahulu"
       ));
       return;
     }
@@ -1191,7 +1313,7 @@
       ));
       return;
     }
-    var text = trackerReminderMessage(r);
+    var text = mod.reminderMessage ? mod.reminderMessage(r) : trackerReminderMessage(r);
     var url = "https://wa.me/" + phone + "?text=" + encodeURIComponent(text);
     window.open(url, "_blank", "noopener,noreferrer");
   }
@@ -1658,6 +1780,7 @@
   function renderOverview(){
     var m = STATE.meetings, s = STATE.sops, d = STATE.damages, t = STATE.trackers, rp = STATE.repairs||[];
     var insp = STATE.inspections, cpl = STATE.complaints, cal = STATE.calibrations, trc = STATE.traces;
+    var veh = STATE.vehicles||[];
     var dPending = d.filter(function(x){ return x.status === "待处理"; });
     var tOpen = t.filter(function(x){ return x.status !== "已完成"; });
     var tOverdue = t.filter(function(x){ return x.status === "已延误"; });
@@ -1671,6 +1794,10 @@
       if(isNaN(due.getTime())) return false;
       return Math.round((due-today)/86400000) <= 14;
     });
+    var vehDue = veh.filter(function(x){
+      return (daysUntil(x.roadTaxExpiry) !== null && daysUntil(x.roadTaxExpiry) <= 14)
+        || (daysUntil(x.insuranceExpiry) !== null && daysUntil(x.insuranceExpiry) <= 14);
+    });
     var cards = [
       {key:"meetings", label:T3("会议记录","Meeting Minutes","Minit Mesyuarat"), big:m.length, sub: m.length ? statusBreakdown(m,["进行中","已完成","待跟进"]) : T("尚无记录")},
       {key:"sops", label:T3("SOP 文档","SOP Documents","Dokumen SOP"), big:s.length, sub: s.length ? statusBreakdown(s,["启用","草稿","停用"]) : T("尚无记录")},
@@ -1679,6 +1806,7 @@
       {key:"calibrations", label:T("设备校准"), big: calDue.length, sub: T3("共 "+cal.length+" 条 · 即将/已到期 "+calDue.length, cal.length+" total · "+calDue.length+" due soon/overdue", cal.length+" jumlah · "+calDue.length+" akan/telah tamat tempoh"), highlight: calDue.length>0},
       {key:"repairs", label:T("设备维修"), big: rpOpen.length, sub: T3("共 "+rp.length+" 条 · 未完成 "+rpOpen.length, rp.length+" total · "+rpOpen.length+" open", rp.length+" jumlah · "+rpOpen.length+" belum selesai"), highlight: rpOpen.length>0},
       {key:"traces", label:T("批次追溯"), big: trc.length, sub: T3("共 "+trc.length+" 条记录", trc.length+" records", trc.length+" rekod")},
+      {key:"vehicles", label:T("汽车管理"), big: vehDue.length, sub: T3("共 "+veh.length+" 辆 · 即将/已到期 "+vehDue.length, veh.length+" vehicles · "+vehDue.length+" due soon/overdue", veh.length+" kenderaan · "+vehDue.length+" akan/telah tamat tempoh"), highlight: vehDue.length>0},
       {key:"damages", label:T("产品损毁记录"), big: dPending.length, sub: T3("共 "+d.length+" 条记录", d.length+" records", d.length+" rekod"), highlight: dPending.length>0},
       {key:"trackers", label:T("追踪记录"), big: tOpen.length, sub: tOverdue.length ? T3("共 "+t.length+" 条 · 已延误 "+tOverdue.length, t.length+" total · "+tOverdue.length+" overdue", t.length+" jumlah · "+tOverdue.length+" tertunggak") : T3("共 "+t.length+" 条", t.length+" total", t.length+" jumlah"), highlight: tOverdue.length>0},
       {key:"leaves", label:T3("请假申请","Leave Requests","Permohonan Cuti"), link: LEAVE_APP_URL, sub:T3("前往 exclwell 系统","Go to exclwell system","Pergi ke sistem exclwell")}
@@ -2006,8 +2134,8 @@
 
   function applyServerState(state){
     STATE = state;
-    if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0};
-    ["meetings","sops","staff","damages","trackers","repairs","inspections","complaints","calibrations","traces"].forEach(function(k){
+    if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0,VEH:0};
+    ["meetings","sops","staff","damages","trackers","repairs","vehicles","inspections","complaints","calibrations","traces"].forEach(function(k){
       if(!STATE[k]) STATE[k] = [];
     });
   }
