@@ -359,7 +359,7 @@
     "保存权限": {en:"Save Permissions", ms:"Simpan Kebenaran"},
     "一个都不勾 = 不限制，可看到全部模块。": {en:"Leave all unchecked = unrestricted, can see all modules.", ms:"Jangan tandakan mana-mana = tiada had, boleh lihat semua modul."},
     "添加团队成员": {en:"Add Team Member", ms:"Tambah Ahli Pasukan"},
-    "需要团队邀请码（跟登录页\"没有账号\"用的是同一个），新成员自己在登录页设置账号也可以，不一定要你来加。默认能看到全部模块，需要限制的话在下面勾选。": {en:"Requires the team invite code (the same one used for \"No account\" on the login page). New members can also set up their own account from the login page — you don't have to add them yourself. Full access is granted by default; check the boxes below to restrict.", ms:"Memerlukan kod jemputan pasukan (sama seperti yang digunakan untuk \"Tiada akaun\" di halaman log masuk). Ahli baharu juga boleh menyediakan akaun mereka sendiri di halaman log masuk — anda tidak perlu menambah mereka sendiri. Akses penuh diberikan secara lalai; tandakan kotak di bawah untuk mengehadkan."},
+    "需要团队邀请码。新成员的账号只能在这里添加——登录页不支持自己注册，只能给已有账号重设密码。默认能看到全部模块，需要限制的话在下面勾选。": {en:"Requires the team invite code. New member accounts can only be added here — the login page doesn't support self-registration, only resetting the password of an account that already exists. Full access is granted by default; check the boxes below to restrict.", ms:"Memerlukan kod jemputan pasukan. Akaun ahli baharu hanya boleh ditambah di sini — halaman log masuk tidak menyokong pendaftaran sendiri, hanya menetapkan semula kata laluan akaun yang sedia ada. Akses penuh diberikan secara lalai; tandakan kotak di bawah untuk mengehadkan."},
     "团队邀请码": {en:"Team invite code", ms:"Kod jemputan pasukan"},
     "用户名": {en:"Username", ms:"Nama Pengguna"},
     "初始密码（至少 4 位）": {en:"Initial Password (min. 4 chars)", ms:"Kata Laluan Awal (min. 4 aksara)"},
@@ -371,26 +371,27 @@
     "你的账号没有账号管理的权限": {en:"Your account doesn't have permission to manage accounts", ms:"Akaun anda tiada kebenaran untuk mengurus akaun"},
 
     // server-side messages (shown verbatim via err.message)
-    "请填写姓名、用户名，密码至少 4 位": {en:"Please fill in name, username, and a password of at least 4 characters", ms:"Sila isi nama, nama pengguna, dan kata laluan sekurang-kurangnya 4 aksara"},
+    "请填写用户名，密码至少 4 位": {en:"Please fill in a username and a password of at least 4 characters", ms:"Sila isi nama pengguna dan kata laluan sekurang-kurangnya 4 aksara"},
+    "还没有这个用户名的账号——新账号需要请管理员在「账号管理」里帮你开通，不能自己注册": {en:"There's no account with this username yet — a new account has to be set up by an admin in Account Management, it can't be self-registered.", ms:"Belum ada akaun dengan nama pengguna ini — akaun baharu perlu disediakan oleh pentadbir dalam Pengurusan Akaun, tidak boleh didaftar sendiri."},
     "这个用户名已经有人用了，换一个试试": {en:"This username is already taken, please try another", ms:"Nama pengguna ini sudah digunakan, sila cuba yang lain"},
     "不能取消自己的账号管理权限，请让其他同事帮你调整": {en:"You can't remove your own account-management access — ask a colleague to adjust it for you", ms:"Anda tidak boleh membuang akses pengurusan akaun anda sendiri — minta rakan sekerja membantu anda menyesuaikannya"},
     "你的账号没有这个模块的权限": {en:"Your account doesn't have permission for this module", ms:"Akaun anda tiada kebenaran untuk modul ini"},
 
     // login / join screens
-    "用团队邀请码设置你的账号——首次使用、忘记密码、新成员加入都用这个": {en:"Set up your account with the team invite code — use this for first-time setup, a forgotten password, or joining as a new member.", ms:"Sediakan akaun anda dengan kod jemputan pasukan — gunakan ini untuk persediaan pertama kali, kata laluan terlupa, atau menyertai sebagai ahli baharu."},
-    "你的姓名": {en:"Your Name", ms:"Nama Anda"},
-    "用户名（登录用，如拼音）": {en:"Username (for login)", ms:"Nama Pengguna (untuk log masuk)"},
-    "设置密码（至少 4 位）": {en:"Set Password (min. 4 chars)", ms:"Tetapkan Kata Laluan (min. 4 aksara)"},
-    "设置并进入": {en:"Set Up & Enter", ms:"Sediakan & Masuk"},
+    "忘记密码？用团队邀请码给你已有的账号重设一个新密码": {en:"Forgot your password? Use the team invite code to set a new one for your existing account.", ms:"Lupa kata laluan? Gunakan kod jemputan pasukan untuk menetapkan kata laluan baharu bagi akaun sedia ada anda."},
+    "设置新密码（至少 4 位）": {en:"New Password (min. 4 chars)", ms:"Kata Laluan Baharu (min. 4 aksara)"},
+    "姓名（仅系统还没有任何账号时需要，用于创建第一个账号）": {en:"Name (only needed if the system has no accounts yet, to create the first one)", ms:"Nama (hanya diperlukan jika sistem belum mempunyai sebarang akaun, untuk mencipta akaun pertama)"},
+    "重设密码并进入": {en:"Reset Password & Enter", ms:"Tetapkan Semula & Masuk"},
+    "还没有账号？新账号请找管理员在「账号管理」里帮你开通，这里没法自己注册。": {en:"Don't have an account yet? Ask an admin to set one up for you in Account Management — self-registration isn't available here.", ms:"Belum ada akaun? Minta pentadbir menyediakan satu untuk anda dalam Pengurusan Akaun — pendaftaran sendiri tidak tersedia di sini."},
     "已经有账号？点此登录": {en:"Already have an account? Log in here", ms:"Sudah ada akaun? Log masuk di sini"},
     "用你自己的账号登录": {en:"Log in with your own account", ms:"Log masuk dengan akaun anda sendiri"},
     "密码": {en:"Password", ms:"Kata Laluan"},
     "登录": {en:"Log In", ms:"Log Masuk"},
-    "没有账号 / 忘记密码 / 新成员加入": {en:"No account / Forgot password / New member joining", ms:"Tiada akaun / Lupa kata laluan / Ahli baharu menyertai"},
+    "忘记密码？点此重设": {en:"Forgot your password? Reset it here", ms:"Lupa kata laluan? Tetapkan semula di sini"},
     "用户名或密码不对，请重试": {en:"Incorrect username or password, please retry", ms:"Nama pengguna atau kata laluan salah, sila cuba lagi"},
     "登录失败，请重试": {en:"Login failed, please retry", ms:"Log masuk gagal, sila cuba lagi"},
     "团队邀请码不对，请找管理员确认": {en:"Incorrect team invite code, please check with an admin", ms:"Kod jemputan pasukan salah, sila semak dengan pentadbir"},
-    "设置失败，请重试": {en:"Setup failed, please retry", ms:"Persediaan gagal, sila cuba lagi"}
+    "重设失败，请重试": {en:"Reset failed, please retry", ms:"Tetapan semula gagal, sila cuba lagi"}
   };
 
   function T(zh) {
@@ -1909,7 +1910,7 @@
     return '<div class="view-header"><h2 class="view-title">'+esc(T("账号管理"))+'</h2></div>'
       + '<div class="panel" style="margin-bottom:18px;">'
       + '<h3 class="panel-title">'+esc(T("添加团队成员"))+'</h3>'
-      + '<p class="external-desc">'+esc(T("需要团队邀请码（跟登录页\"没有账号\"用的是同一个），新成员自己在登录页设置账号也可以，不一定要你来加。默认能看到全部模块，需要限制的话在下面勾选。"))+'</p>'
+      + '<p class="external-desc">'+esc(T("需要团队邀请码。新成员的账号只能在这里添加——登录页不支持自己注册，只能给已有账号重设密码。默认能看到全部模块，需要限制的话在下面勾选。"))+'</p>'
       + '<form id="add-teammate-form" class="add-teammate-form" onsubmit="app.addTeammate(event)">'
       + '<input class="input" type="password" name="teamPin" placeholder="'+esc(T("团队邀请码"))+'" autocomplete="off">'
       + '<input class="input" type="text" name="name" placeholder="'+esc(T("姓名"))+'">'
@@ -2218,15 +2219,16 @@
       root.innerHTML = '<div class="login-gate"><div class="login-card">'
         + renderLangSwitcher("lang-switch-login")
         + '<h2 class="login-title">'+esc(T("团队档案台"))+'</h2>'
-        + '<p class="login-sub">'+esc(T("用团队邀请码设置你的账号——首次使用、忘记密码、新成员加入都用这个"))+'</p>'
+        + '<p class="login-sub">'+esc(T("忘记密码？用团队邀请码给你已有的账号重设一个新密码"))+'</p>'
         + '<form id="login-form" onsubmit="app.submitJoin(event)">'
         + '<input class="input login-input" type="password" name="teamPin" placeholder="'+esc(T("团队邀请码"))+'" autofocus autocomplete="off">'
-        + '<input class="input login-input" type="text" name="name" placeholder="'+esc(T("你的姓名"))+'" autocomplete="name">'
-        + '<input class="input login-input" type="text" name="username" placeholder="'+esc(T("用户名（登录用，如拼音）"))+'" autocomplete="username">'
-        + '<input class="input login-input" type="password" name="password" placeholder="'+esc(T("设置密码（至少 4 位）"))+'" autocomplete="new-password">'
+        + '<input class="input login-input" type="text" name="username" placeholder="'+esc(T("用户名"))+'" autocomplete="username">'
+        + '<input class="input login-input" type="password" name="password" placeholder="'+esc(T("设置新密码（至少 4 位）"))+'" autocomplete="new-password">'
+        + '<input class="input login-input" type="text" name="name" placeholder="'+esc(T("姓名（仅系统还没有任何账号时需要，用于创建第一个账号）"))+'" autocomplete="name">'
         + '<p class="login-error">'+esc(T(msg)||"")+'</p>'
-        + '<button type="submit" class="btn btn-primary login-btn">'+esc(T("设置并进入"))+'</button>'
+        + '<button type="submit" class="btn btn-primary login-btn">'+esc(T("重设密码并进入"))+'</button>'
         + '</form>'
+        + '<p class="login-hint">'+esc(T("还没有账号？新账号请找管理员在「账号管理」里帮你开通，这里没法自己注册。"))+'</p>'
         + '<button type="button" class="login-toggle" onclick="app.toggleLoginMode()">'+esc(T("已经有账号？点此登录"))+'</button>'
         + '</div></div>';
     } else {
@@ -2240,7 +2242,7 @@
         + '<p class="login-error">'+esc(T(msg)||"")+'</p>'
         + '<button type="submit" class="btn btn-primary login-btn">'+esc(T("登录"))+'</button>'
         + '</form>'
-        + '<button type="button" class="login-toggle" onclick="app.toggleLoginMode()">'+esc(T("没有账号 / 忘记密码 / 新成员加入"))+'</button>'
+        + '<button type="button" class="login-toggle" onclick="app.toggleLoginMode()">'+esc(T("忘记密码？点此重设"))+'</button>'
         + '</div></div>';
     }
     var input = root.querySelector('.login-input');
@@ -2281,9 +2283,9 @@
     var payload = {
       mode:"join",
       teamPin: form.elements["teamPin"].value,
-      name: form.elements["name"].value,
       username: form.elements["username"].value,
-      password: form.elements["password"].value
+      password: form.elements["password"].value,
+      name: form.elements["name"] ? form.elements["name"].value : ""
     };
     var btn = form.querySelector('button[type="submit"]');
     if(btn) btn.disabled = true;
@@ -2293,14 +2295,14 @@
       body: JSON.stringify(payload)
     }).then(function(res){
       return res.json().catch(function(){ return {}; }).then(function(json){
-        if(!res.ok) throw new Error(json.message || (res.status === 401 ? "团队邀请码不对，请找管理员确认" : "设置失败，请重试"));
+        if(!res.ok) throw new Error(json.message || (res.status === 401 ? "团队邀请码不对，请找管理员确认" : "重设失败，请重试"));
         return json;
       });
     }).then(function(){
       hideLogin();
       boot();
     }).catch(function(err){
-      renderLogin(err.message || "设置失败，请重试");
+      renderLogin(err.message || "重设失败，请重试");
     });
   }
 

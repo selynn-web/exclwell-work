@@ -31,9 +31,23 @@ module.exports = async function handler(req, res) {
 
   try {
     if (body.mode === "join") {
-      // Self-service: create a new personal account, or reset a forgotten
-      // password for an existing username — both gated by the shared
-      // team invite code (TEAM_PIN). Used from the login screen.
+      // Gated by the shared team invite code (TEAM_PIN). This now does
+      // TWO different things depending on whether the team already has
+      // any accounts:
+      //
+      //  - Normal case (at least one account already exists): PASSWORD
+      //    RESET ONLY for an existing username. Brand-new accounts can no
+      //    longer be self-registered here — account creation is deliberately
+      //    internal-only, done by an already-logged-in admin from 账号管理
+      //    (see api/users.js's "add" op, which requires an authenticated
+      //    session with accounts permission).
+      //
+      //  - Bootstrap case (the team has ZERO accounts — a fresh deployment,
+      //    or every account was somehow removed): this still creates the
+      //    very first account, so a new deployment can never be locked out
+      //    with literally no way to log in and no admin session to use
+      //    api/users.js's "add" op. Once that first account exists, this
+      //    path stops accepting new usernames and only resets passwords.
       if (!process.env.TEAM_PIN) {
         res.status(500).json({ error: "server_not_configured" });
         return;
@@ -43,39 +57,71 @@ module.exports = async function handler(req, res) {
         res.status(401).json({ error: "wrong_pin" });
         return;
       }
-      var name = String(body.name || "").trim();
       var username = String(body.username || "").trim().toLowerCase();
       var password = String(body.password || "");
-      if (!name || !username || password.length < 4) {
-        res.status(400).json({ error: "bad_request", message: "请填写姓名、用户名，密码至少 4 位" });
+      if (!username || password.length < 4) {
+        res.status(400).json({ error: "bad_request", message: "请填写用户名，密码至少 4 位" });
         return;
       }
-      // Optimistic-concurrency update: if someone else's account change
-      // (another join, or an admin add/remove) saves in between our read
-      // and write, retry against the fresh list instead of clobbering it.
+      var existingUsers = await auth.getUsers();
+      var activeUsers = existingUsers.filter(function (u) { return !u.deleted; });
+      var existingUser = activeUsers.find(function (u) { return u.username === username; });
+
+      if (!existingUser && activeUsers.length > 0) {
+        // Not the bootstrap case, and this username isn't a real account —
+        // refuse instead of silently creating one.
+        res.status(404).json({
+          error: "no_such_account",
+          message: "还没有这个用户名的账号——新账号需要请管理员在「账号管理」里帮你开通，不能自己注册",
+        });
+        return;
+      }
+
       var passwordHash = auth.hashPassword(password);
-      var joinResult = await db.kvUpdate(auth.USERS_KEY, function (raw) {
-        var users = Array.isArray(raw) ? raw.slice() : [];
-        var existing = users.find(function (u) { return u.username === username && !u.deleted; });
-        var uid;
-        if (existing) {
-          var idx = users.indexOf(existing);
-          users[idx] = Object.assign({}, existing, { passwordHash: passwordHash, name: name });
-          uid = existing.id;
-        } else {
-          uid = genId();
+      var joinResult;
+      if (existingUser) {
+        // Password reset for an existing account — leave name/permissions
+        // untouched, only replace the password hash.
+        joinResult = await db.kvUpdate(auth.USERS_KEY, function (raw) {
+          var users = Array.isArray(raw) ? raw.slice() : [];
+          var idx = users.findIndex(function (u) { return u.username === username && !u.deleted; });
+          if (idx === -1) {
+            var err = new Error("no_such_account");
+            err.httpStatus = 404;
+            err.httpBody = { error: "no_such_account", message: "还没有这个用户名的账号——新账号需要请管理员在「账号管理」里帮你开通，不能自己注册" };
+            throw err;
+          }
+          users[idx] = Object.assign({}, users[idx], { passwordHash: passwordHash });
+          return { value: users, uid: users[idx].id, name: users[idx].name };
+        });
+      } else {
+        // Bootstrap: no accounts exist yet at all, so this is the very
+        // first one. Needs a name since there's no existing record to
+        // reuse one from.
+        var bootstrapName = String(body.name || "").trim() || username;
+        joinResult = await db.kvUpdate(auth.USERS_KEY, function (raw) {
+          var users = Array.isArray(raw) ? raw.slice() : [];
+          // Re-check under the lock in case another request bootstrapped
+          // the first account in between our read and write.
+          if (users.some(function (u) { return !u.deleted; })) {
+            var err = new Error("no_such_account");
+            err.httpStatus = 404;
+            err.httpBody = { error: "no_such_account", message: "还没有这个用户名的账号——新账号需要请管理员在「账号管理」里帮你开通，不能自己注册" };
+            throw err;
+          }
+          var uid = genId();
           users.push({
             id: uid,
-            name: name,
+            name: bootstrapName,
             username: username,
             passwordHash: passwordHash,
             createdAt: new Date().toISOString(),
           });
-        }
-        return { value: users, uid: uid };
-      });
+          return { value: users, uid: uid, name: bootstrapName };
+        });
+      }
       setSessionCookie(res, joinResult.uid);
-      res.status(200).json({ ok: true, name: name });
+      res.status(200).json({ ok: true, name: joinResult.name });
       return;
     }
 
@@ -91,6 +137,10 @@ module.exports = async function handler(req, res) {
     setSessionCookie(res, u.id);
     res.status(200).json({ ok: true, name: u.name });
   } catch (err) {
+    if (err && err.httpStatus) {
+      res.status(err.httpStatus).json(err.httpBody);
+      return;
+    }
     res.status(500).json({ error: "server_error", message: (err && err.message) || "unknown" });
   }
 };
