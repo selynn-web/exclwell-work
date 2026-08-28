@@ -2215,8 +2215,39 @@
     }).catch(function(){});
   }
 
+  // The 20-second poll calls render(), which regenerates the current
+  // view's HTML from scratch. Most data entry happens through the modal
+  // dialog (openModal), whose fields live in a UI.modal object that
+  // survives a re-render — that's what the UI.modal check below protects.
+  // But 账号管理's "添加团队成员" form and its inline "编辑权限" panel are
+  // plain, un-modal'd <form> elements: their typed values live only in the
+  // DOM, nowhere in JS state, until the moment they're submitted. A poll
+  // tick mid-typing used to wipe them back to blank every 20 seconds — the
+  // "text I typed disappears, I have to retype fast" bug. Skip the poll's
+  // render whenever the add-teammate form has anything typed into it, the
+  // permission-edit panel is open, or any input/textarea/select anywhere
+  // on the page currently has focus (a catch-all for this same pattern
+  // wherever else it might show up).
+  function isEditingSomething(){
+    if(UI && UI.modal) return true;
+    if(ACCOUNTS && ACCOUNTS.editingId) return true;
+    var addForm = document.getElementById("add-teammate-form");
+    if(addForm){
+      var fields = addForm.querySelectorAll("input");
+      for(var i=0;i<fields.length;i++){
+        if(fields[i].type === "checkbox" ? fields[i].checked : fields[i].value){ return true; }
+      }
+    }
+    var active = document.activeElement;
+    if(active && active !== document.body){
+      var tag = active.tagName;
+      if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    }
+    return false;
+  }
+
   function pollState(){
-    if(UI && UI.modal) return; // don't disrupt someone mid-edit
+    if(isEditingSomething()) return; // don't disrupt someone mid-edit
     fetchState().then(function(json){
       if(!json) return;
       applyServerState(json.state);
