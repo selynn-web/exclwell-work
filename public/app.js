@@ -807,8 +807,8 @@
         {name:"status", label:"状态", type:"select", options:["使用中","维修中","已停用"], def:"使用中"}
       ],
       statusColors:{"使用中":"good","维修中":"warn","已停用":"neutral"},
-      extraBadge:function(r){ return expiryBadge(r.roadTaxExpiry, "路税", "Road tax", "Cukai jalan"); },
-      secondaryBadge:function(r){ return expiryBadge(r.insuranceExpiry, "保险", "Insurance", "Insurans"); },
+      extraBadge:function(r){ return expiryBadge(r.roadTaxExpiry, "路税", "Road tax", "Cukai jalan", 30); },
+      secondaryBadge:function(r){ return expiryBadge(r.insuranceExpiry, "保险", "Insurance", "Insurans", 30); },
       extraActions:function(r){
         var actions = [];
         if(vehicleReminderUrgent(r)) actions.push({ label:"📱 "+T("WhatsApp 提醒"), onclick:"app.sendWhatsAppReminder('vehicles','"+r.id+"')" });
@@ -1157,7 +1157,10 @@
   // that tracks a due date on a record (currently 设备校准记录's own inline
   // version, and 汽车管理's road-tax / insurance expiry — each vehicle has
   // two independent due dates, so this needs to run twice per card).
-  function expiryBadge(dateStr, labelZh, labelEn, labelMs){
+  // warnDays controls when the badge turns yellow ("即将到期"); defaults to
+  // 14 but 汽车管理 passes 30 so the badge and the WhatsApp reminder button
+  // (see vehicleReminderUrgent) turn on together, a full month ahead.
+  function expiryBadge(dateStr, labelZh, labelEn, labelMs, warnDays){
     if(!dateStr) return null;
     var due = new Date(dateStr+"T00:00:00");
     if(isNaN(due.getTime())) return null;
@@ -1170,7 +1173,7 @@
       color = "seal";
     } else {
       text = T3(labelZh+" "+days+" 天后到期", labelEn+" due in "+days+" day"+(days===1?"":"s"), labelMs+" tamat tempoh dalam "+days+" hari");
-      color = days <= 14 ? "warn" : "good";
+      color = days <= (warnDays || 14) ? "warn" : "good";
     }
     return { text: text, color: color };
   }
@@ -1183,14 +1186,16 @@
     return Math.round((due-today)/86400000);
   }
 
-  // Same trigger rule as trackers' WhatsApp reminder button: show it once
-  // either date is overdue or due within 3 days. A decommissioned vehicle
-  // never needs a reminder.
+  // Show the WhatsApp reminder button once road tax or insurance is
+  // overdue, or due within 1 month (30 days) — vehicle renewals need more
+  // lead time than a tracker follow-up, so this is a longer window than
+  // trackers' 3-day rule. A decommissioned vehicle never needs a reminder.
+  var VEHICLE_REMINDER_WINDOW_DAYS = 30;
   function vehicleReminderUrgent(r){
     if(!r || r.status === "已停用") return false;
     var rt = daysUntil(r.roadTaxExpiry);
     var ins = daysUntil(r.insuranceExpiry);
-    return (rt !== null && rt <= 3) || (ins !== null && ins <= 3);
+    return (rt !== null && rt <= VEHICLE_REMINDER_WINDOW_DAYS) || (ins !== null && ins <= VEHICLE_REMINDER_WINDOW_DAYS);
   }
 
   function vehicleReminderMessage(r){
@@ -1795,8 +1800,8 @@
       return Math.round((due-today)/86400000) <= 14;
     });
     var vehDue = veh.filter(function(x){
-      return (daysUntil(x.roadTaxExpiry) !== null && daysUntil(x.roadTaxExpiry) <= 14)
-        || (daysUntil(x.insuranceExpiry) !== null && daysUntil(x.insuranceExpiry) <= 14);
+      return (daysUntil(x.roadTaxExpiry) !== null && daysUntil(x.roadTaxExpiry) <= 30)
+        || (daysUntil(x.insuranceExpiry) !== null && daysUntil(x.insuranceExpiry) <= 30);
     });
     var cards = [
       {key:"meetings", label:T3("会议记录","Meeting Minutes","Minit Mesyuarat"), big:m.length, sub: m.length ? statusBreakdown(m,["进行中","已完成","待跟进"]) : T("尚无记录")},
