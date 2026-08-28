@@ -13,6 +13,64 @@ const db = require("./_db");
 
 var USERS_KEY = "team-archive:users";
 
+// Brute-force protection for the login/reset endpoint. Failed attempts are
+// tracked per "key" (a username for a normal wrong-password login, or the
+// literal string "teampin" for a wrong team-invite-code attempt in join
+// mode — the invite code is shared, not per-account, so it's tracked as
+// one bucket rather than per-username) in their own kv_store row —
+// completely separate from USERS_KEY / STATE_KEY, so this never contends
+// with or risks any real app data.
+var LOGIN_ATTEMPTS_KEY = "team-archive:login_attempts";
+var MAX_FAILS = 5;
+var LOCK_MINUTES = 15;
+var FAIL_RESET_MINUTES = 30; // a fail streak that went cold this long ago no longer counts
+
+// Returns { lockedUntil } if `key` is currently locked out, otherwise null.
+// Cheap read-only check — call this BEFORE doing any password verification
+// so a locked-out attempt never even touches scrypt.
+async function checkLoginLock(key) {
+  var all = await db.kvGet(LOGIN_ATTEMPTS_KEY);
+  var entry = all && all[key];
+  if (!entry || !entry.lockedUntil) return null;
+  if (new Date(entry.lockedUntil) > new Date()) return { lockedUntil: entry.lockedUntil };
+  return null;
+}
+
+async function recordLoginFailure(key) {
+  await db.kvUpdate(LOGIN_ATTEMPTS_KEY, function (raw) {
+    var all = raw && typeof raw === "object" ? Object.assign({}, raw) : {};
+    var now = new Date();
+    var entry = all[key];
+    if (!entry || !entry.lastFailAt || now - new Date(entry.lastFailAt) > FAIL_RESET_MINUTES * 60 * 1000) {
+      entry = { fails: 0, lastFailAt: null, lockedUntil: null };
+    }
+    entry.fails = (entry.fails || 0) + 1;
+    entry.lastFailAt = now.toISOString();
+    if (entry.fails >= MAX_FAILS) {
+      entry.lockedUntil = new Date(now.getTime() + LOCK_MINUTES * 60 * 1000).toISOString();
+    }
+    all[key] = entry;
+    return { value: all };
+  });
+}
+
+async function clearLoginFailures(key) {
+  await db.kvUpdate(LOGIN_ATTEMPTS_KEY, function (raw) {
+    var all = raw && typeof raw === "object" ? Object.assign({}, raw) : {};
+    if (all[key]) {
+      var next = Object.assign({}, all);
+      delete next[key];
+      return { value: next };
+    }
+    return { value: all };
+  });
+}
+
+function lockMessage(lockedUntil) {
+  var minutesLeft = Math.max(1, Math.ceil((new Date(lockedUntil) - new Date()) / 60000));
+  return "尝试次数过多，账号已暂时锁定，请 " + minutesLeft + " 分钟后再试";
+}
+
 // Modules that a user's account can be restricted to a subset of.
 // "overview" and "leaves" are never restricted (leaves is just an
 // external link; overview is filtered down to whatever the user can see).
@@ -119,5 +177,9 @@ module.exports = {
   verifyPassword: verifyPassword,
   canAccess: canAccess,
   RESTRICTABLE_MODULES: RESTRICTABLE_MODULES,
+  checkLoginLock: checkLoginLock,
+  recordLoginFailure: recordLoginFailure,
+  clearLoginFailures: clearLoginFailures,
+  lockMessage: lockMessage,
   USERS_KEY: USERS_KEY,
 };

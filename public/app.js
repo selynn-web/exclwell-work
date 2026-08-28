@@ -110,6 +110,8 @@
     "内容 / 步骤": {en:"Content / Steps", ms:"Kandungan / Langkah"},
     "文档链接（云盘 / 企业微信 / 钉钉等，PDF/Word 请用此方式）": {en:"Document Link (cloud drive / WeCom / DingTalk, etc. — use this for PDF/Word)", ms:"Pautan Dokumen (cloud drive / WeCom / DingTalk, dll. — guna cara ini untuk PDF/Word)"},
     "附件文件（图片 / PDF / Word 等，最大 4MB）": {en:"Attachment File (image / PDF / Word, etc., max 4MB)", ms:"Fail Lampiran (imej / PDF / Word, dll., maksimum 4MB)"},
+    "损毁照片（可拍照，最大 4MB）": {en:"Damage Photo (camera or upload, max 4MB)", ms:"Foto Kerosakan (kamera atau muat naik, maksimum 4MB)"},
+    "故障/维修照片（可拍照，最大 4MB）": {en:"Fault / Repair Photo (camera or upload, max 4MB)", ms:"Foto Kerosakan / Pembaikan (kamera atau muat naik, maksimum 4MB)"},
     "启用": {en:"Active", ms:"Aktif"},
     "草稿": {en:"Draft", ms:"Draf"},
     "停用": {en:"Inactive", ms:"Tidak Aktif"},
@@ -300,6 +302,13 @@
 
     // modal / cards
     "确认删除": {en:"Confirm Delete", ms:"Sahkan Padam"},
+    "彻底删除": {en:"Permanently Delete", ms:"Padam Kekal"},
+    "确认彻底删除": {en:"Confirm Permanent Delete", ms:"Sahkan Padam Kekal"},
+    "回收站": {en:"Recycle Bin", ms:"Tong Sampah"},
+    "恢复": {en:"Restore", ms:"Pulihkan"},
+    "回收站是空的": {en:"Recycle bin is empty", ms:"Tong sampah kosong"},
+    "已恢复": {en:"Restored", ms:"Dipulihkan"},
+    "已彻底删除": {en:"Permanently deleted", ms:"Dipadam kekal"},
     "取消": {en:"Cancel", ms:"Batal"},
     "编辑": {en:"Edit", ms:"Edit"},
     "新建": {en:"New", ms:"Baharu"},
@@ -307,6 +316,12 @@
     "删除": {en:"Delete", ms:"Padam"},
     "创建：": {en:"Created by: ", ms:"Dicipta oleh: "},
     "最近修改：": {en:"Last edited by: ", ms:"Terakhir disunting oleh: "},
+    "删除：": {en:"Deleted by: ", ms:"Dipadam oleh: "},
+    "修改历史": {en:"Change History", ms:"Sejarah Perubahan"},
+    "创建": {en:"Created", ms:"Dicipta"},
+    "修改": {en:"Edited", ms:"Disunting"},
+    "没有找到相关记录": {en:"No matching records", ms:"Tiada rekod dijumpai"},
+    "清除": {en:"Clear", ms:"Kosongkan"},
     "(未命名)": {en:"(Untitled)", ms:"(Tiada Tajuk)"},
     "下载附件：": {en:"Download Attachment: ", ms:"Muat Turun Lampiran: "},
     "📄 打开文档链接": {en:"📄 Open Document Link", ms:"📄 Buka Pautan Dokumen"},
@@ -561,6 +576,7 @@
     },
     damages:{
       key:"damages", label:"产品损毁记录", singular:"损毁记录", idPrefix:"DMG", titleField:"product",
+      attachmentField:"photo",
       fields:[
         {name:"product", label:"产品名称 / 品项", type:"text", required:true},
         {name:"department", label:"部门", type:"select", options:DEPARTMENTS, def:"大豆部门"},
@@ -570,7 +586,9 @@
         {name:"reasonDetail", label:"详细说明", type:"textarea", full:true},
         {name:"lossValue", label:"预估损失（RM）", type:"text"},
         {name:"status", label:"处理状态", type:"select", options:["待处理","已处理","已上报"], def:"待处理"},
-        {name:"notes", label:"处理备注", type:"textarea", full:true}
+        {name:"notes", label:"处理备注", type:"textarea", full:true},
+        {name:"photo", type:"hidden"},
+        {type:"file", label:"损毁照片（可拍照，最大 4MB）", targetField:"photo", accept:"image/*", capture:"environment", full:true}
       ],
       statusColors:{"待处理":"warn","已处理":"good","已上报":"accent"},
       metaLines:function(r){
@@ -741,6 +759,7 @@
     },
     repairs:{
       key:"repairs", label:"设备维修记录", singular:"维修记录", idPrefix:"RPR", titleField:"equipment",
+      attachmentField:"photo",
       fields:[
         {name:"equipment", label:"设备名称", type:"text", required:true},
         {name:"department", label:"部门", type:"select", options:DEPARTMENTS, def:"大豆部门"},
@@ -749,7 +768,9 @@
         {name:"action", label:"维修内容 / 处理方式", type:"textarea", full:true},
         {name:"technician", label:"维修人员 / 单位", type:"text"},
         {name:"cost", label:"维修费用（RM）", type:"text"},
-        {name:"status", label:"状态", type:"select", options:["待维修","维修中","已完成"], def:"待维修"}
+        {name:"status", label:"状态", type:"select", options:["待维修","维修中","已完成"], def:"待维修"},
+        {name:"photo", type:"hidden"},
+        {type:"file", label:"故障/维修照片（可拍照，最大 4MB）", targetField:"photo", accept:"image/*", capture:"environment", full:true}
       ],
       statusColors:{"待维修":"warn","维修中":"accent","已完成":"good"},
       secondaryBadge:function(r){
@@ -855,6 +876,10 @@
   // api/_auth.js's RESTRICTABLE_MODULES. "overview" and "leaves" are
   // never restricted.
   var RESTRICTABLE_MODULES = ["meetings","sops","inspections","complaints","calibrations","repairs","traces","vehicles","damages","trackers","accounts"];
+  // Modules the top-bar global search looks across — every RESTRICTABLE_MODULES
+  // entry except "accounts" (team member accounts aren't record data in
+  // STATE, they live in a separate accounts list with its own UI).
+  var GLOBAL_SEARCH_MODULES = RESTRICTABLE_MODULES.filter(function(k){ return k !== "accounts"; });
   function moduleLabel(key){
     if(MODULES[key]) return T(MODULES[key].label);
     if(INTERNAL_VIEWS[key]) return T(INTERNAL_VIEWS[key].label);
@@ -907,7 +932,9 @@
       calendarCursor:{y:now.getFullYear(), m:now.getMonth()},
       calendarSelectedDate:null,
       trackersViewMode:"list",
-      ganttZoom:"week"
+      ganttZoom:"week",
+      trashOpen:{},
+      globalSearch:""
     };
   }
   function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
@@ -1442,6 +1469,63 @@
       + renderLangSwitcher("lang-switch-sidebar");
   }
 
+  /* --- 全局搜索：一次搜全部模块（只看当前账号有权限的模块） ------------- */
+
+  // Attachment blobs (base64, up to ~5MB of text) and the change-history
+  // array are deliberately excluded — scanning those on every keystroke
+  // would be slow and they're not meaningful to match against anyway.
+  var GLOBAL_SEARCH_SKIP_FIELDS = {attachment:1, photo:1, history:1};
+
+  function recordMatchesQuery(r, q){
+    return Object.keys(r).some(function(k){
+      if(GLOBAL_SEARCH_SKIP_FIELDS[k]) return false;
+      var v = r[k];
+      if(v == null || typeof v === "object") return false;
+      return String(v).toLowerCase().indexOf(q) > -1;
+    });
+  }
+
+  function globalSearchResults(){
+    var q = (UI.globalSearch||"").trim().toLowerCase();
+    if(!q) return [];
+    var results = [];
+    GLOBAL_SEARCH_MODULES.forEach(function(moduleKey){
+      if(!isModuleAllowed(moduleKey)) return; // client-side belt; server already omits data a restricted account can't see
+      var mod = MODULES[moduleKey];
+      if(!mod) return;
+      (STATE[moduleKey]||[]).forEach(function(r){
+        if(recordMatchesQuery(r, q)){
+          results.push({ moduleKey:moduleKey, id:r.id, title: r[mod.titleField] || r.id, moduleLabel: T(mod.label) });
+        }
+      });
+    });
+    return results.slice(0, 30);
+  }
+
+  function renderGlobalSearch(){
+    var q = UI.globalSearch || "";
+    var trimmed = q.trim();
+    var dropdown = "";
+    if(trimmed){
+      var results = globalSearchResults();
+      dropdown = '<div class="global-search-results">' + (results.length
+        ? results.map(function(r){
+            return '<button type="button" class="global-search-result" onclick="app.jumpToSearchResult(\''+r.moduleKey+'\',\''+r.id+'\')">'
+              + '<span class="gsr-module">'+esc(r.moduleLabel)+'</span>'
+              + '<span class="gsr-title">'+esc(r.title)+'</span>'
+              + '<span class="gsr-id num">'+esc(r.id)+'</span>'
+              + '</button>';
+          }).join("")
+        : '<div class="global-search-empty">'+esc(T("没有找到相关记录"))+'</div>'
+      ) + '</div>';
+    }
+    return '<div class="global-search">'
+      + '<input id="global-search-input" class="input global-search-input" type="text" placeholder="'+esc(T3("搜索全部模块…","Search everything…","Cari semua…"))+'" value="'+esc(q)+'" oninput="app.setGlobalSearch(this.value)">'
+      + (q ? '<button type="button" class="global-search-clear" onclick="app.clearGlobalSearch()" aria-label="'+esc(T("清除"))+'">×</button>' : '')
+      + dropdown
+      + '</div>';
+  }
+
   function renderSaveStatus(){
     var map = {
       connecting:{text:T("连接中…"), cls:"pill-neutral"},
@@ -1489,9 +1573,10 @@
       var raw = record ? record[f.targetField] : null;
       if(raw){ try{ current = JSON.parse(raw); }catch(err){ current = null; } }
       var statusHtml = current ? renderFileStatus(current.name, current.size, false) : '<span class="file-empty">'+esc(T("未上传附件"))+'</span>';
+      var captureAttr = f.capture ? (' capture="'+f.capture+'"') : "";
       return '<div class="field field-full"><span class="field-label">'+esc(fieldLabel(f,record))+'</span>'
         + '<div class="file-field" data-target="'+f.targetField+'">'
-        + '<input type="file" class="file-input-native" accept="'+(f.accept||"")+'" onchange="app.handleFileSelect(event, this)">'
+        + '<input type="file" class="file-input-native" accept="'+(f.accept||"")+'"'+captureAttr+' onchange="app.handleFileSelect(event, this)">'
         + '<div class="file-status">'+statusHtml+'</div>'
         + '</div></div>';
     }
@@ -1528,14 +1613,21 @@
 
   function renderModal(){
     if(UI.confirmDelete){
+      var isPurge = !!UI.confirmDelete.purge;
       var mod0 = MODULES[UI.confirmDelete.module];
-      var rec0 = STATE[UI.confirmDelete.module].find(function(r){ return r.id === UI.confirmDelete.id; });
+      var sourceArr0 = isPurge ? STATE.trash[UI.confirmDelete.module] : STATE[UI.confirmDelete.module];
+      var rec0 = (sourceArr0||[]).find(function(r){ return r.id === UI.confirmDelete.id; });
       var label0 = rec0 ? (rec0[mod0.titleField] || rec0.id) : UI.confirmDelete.id;
+      var title = isPurge ? T("彻底删除") : T("确认删除");
+      var text = isPurge
+        ? T3('确定要彻底删除"'+label0+'"吗？这次真的无法恢复了。', 'Permanently delete "'+label0+'"? This really cannot be undone.', 'Padam kekal "'+label0+'"? Kali ini benar-benar tidak boleh dibuat asal.')
+        : T3('确定要删除"'+label0+'"吗？删除后可以到回收站找回来。', 'Delete "'+label0+'"? You can recover it from the recycle bin afterward.', 'Padam "'+label0+'"? Anda boleh memulihkannya daripada tong sampah selepas ini.');
+      var confirmLabel = isPurge ? T("确认彻底删除") : T("确认删除");
       return '<div class="overlay" onclick="app.cancelDelete()"><div class="modal modal-sm" onclick="event.stopPropagation()">'
-        + '<h3 class="modal-title">'+esc(T("确认删除"))+'</h3>'
-        + '<p class="modal-text">'+esc(T3('确定要删除"'+label0+'"吗？此操作无法撤销。', 'Are you sure you want to delete "'+label0+'"? This cannot be undone.', 'Adakah anda pasti mahu memadam "'+label0+'"? Tindakan ini tidak boleh dibuat asal.'))+'</p>'
+        + '<h3 class="modal-title">'+esc(title)+'</h3>'
+        + '<p class="modal-text">'+esc(text)+'</p>'
         + '<div class="modal-actions"><button class="btn btn-ghost" onclick="app.cancelDelete()">'+esc(T("取消"))+'</button>'
-        + '<button class="btn btn-danger" onclick="app.confirmDeleteNow()">'+esc(T("确认删除"))+'</button></div>'
+        + '<button class="btn btn-danger" onclick="app.confirmDeleteNow()">'+esc(confirmLabel)+'</button></div>'
         + '</div></div>';
     }
     if(!UI.modal) return "";
@@ -1548,6 +1640,16 @@
     var deptList = Array.from(new Set(DEPARTMENTS.concat(STATE.staff.map(function(s){return s.department;}).filter(Boolean))));
     var singularT = T(mod.singular);
     var heading = (LANG==="zh" ? ((isEdit?"编辑":"新建")+singularT) : ((isEdit?T("编辑"):T("新建"))+" "+singularT)) + (isEdit ? ("　"+baseRecord.id) : "");
+    var historyHtml = "";
+    if(isEdit && Array.isArray(baseRecord.history) && baseRecord.history.length){
+      var actionLabels = {create:T("创建"), update:T("修改"), delete:T("删除"), restore:T("恢复")};
+      var histRows = baseRecord.history.slice().reverse().map(function(h){
+        var label = actionLabels[h.action] || h.action;
+        var when = h.at ? h.at.slice(0,16).replace("T"," ") : "";
+        return '<li>'+esc(label)+' · '+esc(h.by||"")+' · '+esc(when)+'</li>';
+      }).join("");
+      historyHtml = '<details class="history-details"><summary>'+esc(T("修改历史"))+' ('+baseRecord.history.length+')</summary><ul class="history-list">'+histRows+'</ul></details>';
+    }
     return '<div class="overlay" onclick="app.closeModal()"><div class="modal" onclick="event.stopPropagation()">'
       + '<h3 class="modal-title">'+esc(heading)+'</h3>'
       + '<form id="record-form" onsubmit="app.submitForm(event,\''+mod.key+'\')">'
@@ -1555,6 +1657,7 @@
       + '<div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="app.closeModal()">'+esc(T("取消"))+'</button>'
       + '<button type="submit" class="btn btn-primary">'+esc(T("保存"))+'</button></div>'
       + '</form>'
+      + historyHtml
       + '<datalist id="deptList">'+deptList.map(function(d){return '<option value="'+esc(d)+'">';}).join("")+'</datalist>'
       + '</div></div>';
   }
@@ -1659,6 +1762,39 @@
       + '</div>';
   }
 
+  /* --- 回收站：软删除后可以恢复，直到有人手动彻底删除 ------------------- */
+
+  function renderTrashToggle(moduleKey){
+    var count = ((STATE.trash && STATE.trash[moduleKey]) || []).length;
+    return '<button type="button" class="btn btn-ghost btn-sm" onclick="app.toggleTrash(\''+moduleKey+'\')">'
+      + '🗑 ' + esc(T("回收站")) + (count ? ' <span class="trash-count num">'+count+'</span>' : '')
+      + '</button>';
+  }
+
+  function renderTrashPanel(moduleKey){
+    if(!UI.trashOpen[moduleKey]) return "";
+    var wd = writeDisabled();
+    var mod = MODULES[moduleKey];
+    var items = ((STATE.trash && STATE.trash[moduleKey]) || []).slice().reverse();
+    var body = items.length
+      ? '<div class="trash-list">' + items.map(function(r){
+          var title = r[mod.titleField] || r.id;
+          var meta = r.deletedBy ? (T("删除：")+r.deletedBy+(r.deletedAt?(" ("+r.deletedAt.slice(0,10)+")"):"")) : "";
+          return '<div class="trash-row">'
+            + '<div class="trash-row-main">'
+              + '<span class="card-id num">'+esc(r.id)+'</span>'
+              + '<span class="trash-row-title">'+esc(title)+'</span>'
+              + (meta ? '<span class="trash-row-meta">'+esc(meta)+'</span>' : '')
+            + '</div>'
+            + '<div class="trash-row-actions">'
+              + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.restoreRecord(\''+moduleKey+'\',\''+r.id+'\')" '+wd+'>'+esc(T("恢复"))+'</button>'
+              + '<button type="button" class="btn btn-danger btn-sm" onclick="app.requestPurge(\''+moduleKey+'\',\''+r.id+'\')" '+wd+'>'+esc(T("彻底删除"))+'</button>'
+            + '</div></div>';
+        }).join("") + '</div>'
+      : '<p class="trash-empty">'+esc(T("回收站是空的"))+'</p>';
+    return '<div class="panel trash-panel"><h3 class="panel-title">'+esc(T("回收站"))+'</h3>'+body+'</div>';
+  }
+
   function renderModuleView(moduleKey){
     if(moduleKey === "repairs") return renderRepairsView();
     if(moduleKey === "trackers") return renderTrackersView();
@@ -1671,10 +1807,12 @@
     return '<div class="view-header">'
       + '<h2 class="view-title">'+esc(modLabel)+' <span class="view-count num">'+STATE[moduleKey].length+'</span></h2>'
       + '<div class="view-tools">'
-      + '<input class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search[moduleKey]||"")+'" oninput="app.setSearch(\''+moduleKey+'\', this.value)">'
+      + '<input id="module-search-input" class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search[moduleKey]||"")+'" oninput="app.setSearch(\''+moduleKey+'\', this.value)">'
       + '<button class="btn btn-ghost" onclick="app.exportModule(\''+moduleKey+'\')">'+esc(T("导出全部"))+'</button>'
+      + renderTrashToggle(moduleKey)
       + '<button class="btn btn-primary" onclick="app.openModal(\''+moduleKey+'\', null)" '+wd+'>'+esc(newBtnLabel)+'</button>'
       + '</div></div>'
+      + renderTrashPanel(moduleKey)
       + (moduleKey === "trackers" ? renderFlaggedPanel() : "")
       + (list.length
           ? '<div class="card-grid">' + list.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
@@ -1710,11 +1848,12 @@
       + '<div class="view-tools">'
       + toggle
       + (mode === "list" ? (
-          '<input class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search.repairs||"")+'" oninput="app.setSearch(\'repairs\', this.value)">'
+          '<input id="module-search-input" class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search.repairs||"")+'" oninput="app.setSearch(\'repairs\', this.value)">'
           + '<button class="btn btn-ghost" onclick="app.exportModule(\'repairs\')">'+esc(T("导出全部"))+'</button>'
         ) : '')
+      + renderTrashToggle("repairs")
       + '<button class="btn btn-primary" onclick="app.openModal(\'repairs\', null)" '+wd+'>'+esc(newBtnLabel)+'</button>'
-      + '</div></div>';
+      + '</div></div>' + renderTrashPanel("repairs");
     if(mode === "calendar") return header + renderRepairsCalendar();
     var list = getFiltered("repairs").slice().reverse();
     return header + (list.length
@@ -1822,11 +1961,12 @@
       + '<div class="view-tools">'
       + toggle
       + (mode === "list" ? (
-          '<input class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search.trackers||"")+'" oninput="app.setSearch(\'trackers\', this.value)">'
+          '<input id="module-search-input" class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search.trackers||"")+'" oninput="app.setSearch(\'trackers\', this.value)">'
           + '<button class="btn btn-ghost" onclick="app.exportModule(\'trackers\')">'+esc(T("导出全部"))+'</button>'
         ) : '')
+      + renderTrashToggle("trackers")
       + '<button class="btn btn-primary" onclick="app.openModal(\'trackers\', null)" '+wd+'>'+esc(newBtnLabel)+'</button>'
-      + '</div></div>';
+      + '</div></div>' + renderTrashPanel("trackers");
     if(mode === "gantt") return header + renderFlaggedPanel() + renderTrackersGantt();
     var list = getFiltered("trackers").slice().reverse();
     return header + renderFlaggedPanel() + (list.length
@@ -2232,6 +2372,21 @@
   }
 
   function render(){
+    // The whole tree is rebuilt from an innerHTML string on every render —
+    // there's no persistent DOM/event-listener wiring in this app (see the
+    // architecture note on pollState/isEditingSomething above). That means
+    // an <input> mid-keystroke (search boxes that call render() on every
+    // oninput, most notably) would normally lose focus and cursor position
+    // the instant its parent's innerHTML is replaced. Snapshot the focused
+    // element's id (and, for a text input, its cursor position) before the
+    // rebuild and restore it after — a no-op when nothing focused has an id.
+    var prevActive = document.activeElement;
+    var focusId = (prevActive && prevActive.id) ? prevActive.id : null;
+    var selStart = null, selEnd = null;
+    if(focusId && typeof prevActive.selectionStart === "number"){
+      selStart = prevActive.selectionStart;
+      selEnd = prevActive.selectionEnd;
+    }
     var root = document.getElementById("app-root");
     var body = UI.view === "overview" ? renderOverview()
       : UI.view === "accounts" ? renderAccountsView()
@@ -2240,11 +2395,20 @@
     root.innerHTML = '<div class="app-shell">'
       + '<aside class="sidebar">'+renderSidebar()+'</aside>'
       + '<main class="main">'
-      + '<div class="main-topbar">'+renderSaveStatus()+'</div>'
+      + '<div class="main-topbar">'+renderGlobalSearch()+renderSaveStatus()+'</div>'
       + renderBanner()
       + body
       + '</main></div>'
       + renderModal();
+    if(focusId){
+      var el = document.getElementById(focusId);
+      if(el && typeof el.focus === "function"){
+        el.focus();
+        if(selStart != null && el.setSelectionRange){
+          try{ el.setSelectionRange(selStart, selEnd); }catch(err){}
+        }
+      }
+    }
   }
 
   /* ---------- actions ---------- */
@@ -2256,6 +2420,14 @@
     if(key === "accounts") fetchAccounts();
   }
   function setSearch(moduleKey, value){ UI.search[moduleKey] = value; render(); }
+
+  function setGlobalSearch(value){ UI.globalSearch = value; render(); }
+  function clearGlobalSearch(){ UI.globalSearch = ""; render(); }
+  function jumpToSearchResult(moduleKey, id){
+    UI.globalSearch = "";
+    UI.view = moduleKey;
+    openModal(moduleKey, id);
+  }
 
   function setRepairsViewMode(mode){
     UI.repairsViewMode = (mode === "calendar") ? "calendar" : "list";
@@ -2311,7 +2483,26 @@
   }
   function closeModal(){ UI.modal = null; render(); }
   function requestDelete(moduleKey, id){ UI.confirmDelete = {module:moduleKey, id:id}; render(); }
+  function requestPurge(moduleKey, id){ UI.confirmDelete = {module:moduleKey, id:id, purge:true}; render(); }
   function cancelDelete(){ UI.confirmDelete = null; render(); }
+
+  function toggleTrash(moduleKey){
+    UI.trashOpen[moduleKey] = !UI.trashOpen[moduleKey];
+    render();
+  }
+
+  function restoreRecord(moduleKey, id){
+    var before = deepClone(STATE);
+    var idx = (STATE.trash[moduleKey]||[]).findIndex(function(r){ return r.id === id; });
+    if(idx > -1){
+      var rec = STATE.trash[moduleKey].splice(idx,1)[0];
+      delete rec.deleted; delete rec.deletedAt; delete rec.deletedBy;
+      STATE[moduleKey].push(rec);
+    }
+    render();
+    saveOp({op:"restore", module:moduleKey, id:id}, before);
+    toast(T("已恢复"));
+  }
 
   function onMeetingTypeChange(){
     var form = document.getElementById("record-form");
@@ -2361,12 +2552,22 @@
 
   function confirmDeleteNow(){
     if(!UI.confirmDelete) return;
-    var moduleKey = UI.confirmDelete.module, id = UI.confirmDelete.id;
+    var moduleKey = UI.confirmDelete.module, id = UI.confirmDelete.id, isPurge = !!UI.confirmDelete.purge;
     var before = deepClone(STATE);
-    STATE[moduleKey] = STATE[moduleKey].filter(function(r){ return r.id !== id; });
+    if(isPurge){
+      STATE.trash[moduleKey] = (STATE.trash[moduleKey]||[]).filter(function(r){ return r.id !== id; });
+    } else {
+      // Soft delete: moves off the live list immediately (same instant
+      // feedback as before) — the server keeps it, so it reappears in the
+      // module's 回收站 once the response comes back.
+      var rec = STATE[moduleKey].find(function(r){ return r.id === id; });
+      STATE[moduleKey] = STATE[moduleKey].filter(function(r){ return r.id !== id; });
+      if(rec) STATE.trash[moduleKey] = (STATE.trash[moduleKey]||[]).concat([rec]);
+    }
     UI.confirmDelete = null;
     render();
-    saveOp({op:"delete", module:moduleKey, id:id}, before);
+    saveOp({op:(isPurge?"purge":"delete"), module:moduleKey, id:id}, before);
+    if(isPurge) toast(T("已彻底删除"));
   }
 
   /* ---------- persistence ---------- */
@@ -2374,8 +2575,10 @@
   function applyServerState(state){
     STATE = state;
     if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0,VEH:0};
+    if(!STATE.trash) STATE.trash = {};
     ["meetings","sops","staff","damages","trackers","repairs","vehicles","inspections","complaints","calibrations","traces"].forEach(function(k){
       if(!STATE[k]) STATE[k] = [];
+      if(!STATE.trash[k]) STATE.trash[k] = [];
     });
   }
 
@@ -2461,6 +2664,7 @@
   }
 
   function pollState(){
+    if(document.hidden) return; // tab is in the background — no point spending a request nobody will see
     if(isEditingSomething()) return; // don't disrupt someone mid-edit
     fetchState().then(function(json){
       if(!json) return;
@@ -2471,6 +2675,17 @@
       render();
     }).catch(function(){});
   }
+
+  // While the tab is in the background, pollState() above is a no-op (see
+  // its document.hidden guard) — no point spending a request nobody will
+  // see. The moment the tab comes back to the front, refresh right away
+  // instead of leaving the user looking at data that could be up to 20s
+  // stale from whenever they tabbed away.
+  document.addEventListener("visibilitychange", function(){
+    if(!document.hidden && mode === "writer" && pollTimer){
+      pollState();
+    }
+  });
 
   /* ---------- login gate ---------- */
 
@@ -2595,7 +2810,9 @@
 
   window.app = {
     setView: setView, setSearch: setSearch, openModal: openModal, closeModal: closeModal,
+    setGlobalSearch: setGlobalSearch, clearGlobalSearch: clearGlobalSearch, jumpToSearchResult: jumpToSearchResult,
     requestDelete: requestDelete, cancelDelete: cancelDelete, confirmDeleteNow: confirmDeleteNow,
+    requestPurge: requestPurge, toggleTrash: toggleTrash, restoreRecord: restoreRecord,
     submitForm: submitForm, onMeetingTypeChange: onMeetingTypeChange,
     handleFileSelect: handleFileSelect, removeAttachment: removeAttachment, downloadAttachment: downloadAttachment,
     submitLogin: submitLogin, submitJoin: submitJoin, toggleLoginMode: toggleLoginMode, logout: logout,

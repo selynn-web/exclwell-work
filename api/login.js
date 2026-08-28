@@ -52,11 +52,21 @@ module.exports = async function handler(req, res) {
         res.status(500).json({ error: "server_not_configured" });
         return;
       }
+      // The team invite code is shared (not per-account), so brute-force
+      // attempts against it are tracked under one bucket rather than per
+      // username — see api/_auth.js's comment on LOGIN_ATTEMPTS_KEY.
+      var pinLock = await auth.checkLoginLock("teampin");
+      if (pinLock) {
+        res.status(429).json({ error: "locked", message: auth.lockMessage(pinLock.lockedUntil) });
+        return;
+      }
       var pin = body.teamPin != null ? String(body.teamPin) : "";
       if (pin !== process.env.TEAM_PIN) {
+        await auth.recordLoginFailure("teampin");
         res.status(401).json({ error: "wrong_pin" });
         return;
       }
+      await auth.clearLoginFailures("teampin");
       var username = String(body.username || "").trim().toLowerCase();
       var password = String(body.password || "");
       if (!username || password.length < 4) {
@@ -128,12 +138,20 @@ module.exports = async function handler(req, res) {
     // Normal login with an existing personal account.
     var username2 = String(body.username || "").trim().toLowerCase();
     var password2 = String(body.password || "");
+    var loginLockKey = "login:" + username2;
+    var loginLock = username2 ? await auth.checkLoginLock(loginLockKey) : null;
+    if (loginLock) {
+      res.status(429).json({ error: "locked", message: auth.lockMessage(loginLock.lockedUntil) });
+      return;
+    }
     var users2 = await auth.getUsers();
     var u = users2.find(function (x) { return x.username === username2 && !x.deleted; });
     if (!u || !auth.verifyPassword(password2, u.passwordHash)) {
+      if (username2) await auth.recordLoginFailure(loginLockKey);
       res.status(401).json({ error: "wrong_login" });
       return;
     }
+    await auth.clearLoginFailures(loginLockKey);
     setSessionCookie(res, u.id);
     res.status(200).json({ ok: true, name: u.name });
   } catch (err) {

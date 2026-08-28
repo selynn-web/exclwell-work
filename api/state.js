@@ -44,11 +44,45 @@ function normalize(state) {
   return d;
 }
 
+// Lightweight change log: {at, by, action} entries only — no full field
+// diffing (the field types vary too much across modules to diff generically,
+// and a full diff would grow the already-single-blob storage even faster).
+// Capped so one record's history can't grow unbounded over years of edits.
+var MAX_HISTORY = 20;
+function pushHistory(existing, entry) {
+  var next = (Array.isArray(existing) ? existing.slice() : []).concat([entry]);
+  if (next.length > MAX_HISTORY) next = next.slice(next.length - MAX_HISTORY);
+  return next;
+}
+
 function badRequest(status, body) {
   var err = new Error(body.error || "bad_request");
   err.httpStatus = status;
   err.httpBody = body;
   return err;
+}
+
+// Deleting a record no longer removes it from storage — it's flagged
+// deleted:true/deletedAt/deletedBy and stays in the same array (see the
+// "delete" op below). This function is what turns that one array into the
+// two views the client actually gets: the normal live list (everywhere
+// unchanged code already expects) and a separate `trash` map for the
+// recycle-bin UI. Module permission (canAccess) gates both views the same
+// way it already gated the live list, so a restricted account can't see
+// deleted records from a module it can't access either.
+function shapeForClient(state, me) {
+  var out = { counters: state.counters, trash: {} };
+  VALID_MODULES.forEach(function (k) {
+    if (!auth.canAccess(me, k)) {
+      out[k] = [];
+      out.trash[k] = [];
+      return;
+    }
+    var arr = Array.isArray(state[k]) ? state[k] : [];
+    out[k] = arr.filter(function (r) { return !r.deleted; });
+    out.trash[k] = arr.filter(function (r) { return r.deleted; });
+  });
+  return out;
 }
 
 module.exports = async function handler(req, res) {
@@ -60,13 +94,10 @@ module.exports = async function handler(req, res) {
 
   try {
     if (req.method === "GET") {
-      var current = normalize(await db.kvGet(STATE_KEY));
-      // Modules the account isn't allowed to see are returned empty —
-      // enforced here, not just hidden in the UI, so a restricted account
-      // can't read that data by calling the API directly either.
-      VALID_MODULES.forEach(function (k) {
-        if (!auth.canAccess(me, k)) current[k] = [];
-      });
+      // shapeForClient() also enforces module permissions on both the live
+      // list and the trash view — not just hidden in the UI, a restricted
+      // account can't read that data by calling the API directly either.
+      var current = shapeForClient(normalize(await db.kvGet(STATE_KEY)), me);
       // A lightweight name+phone directory, available to every logged-in
       // teammate regardless of module permissions (unlike the full account
       // list behind 账号管理/"accounts"). Used so anyone working a tracker
@@ -121,28 +152,57 @@ module.exports = async function handler(req, res) {
           delete incoming.createdAt;
           delete incoming.updatedBy;
           delete incoming.updatedAt;
+          delete incoming.history;
 
           if (record.id && record.id !== "（保存中…）") {
             var idx = arr.findIndex(function (r) {
               return r.id === record.id;
             });
             if (idx > -1) {
-              arr[idx] = Object.assign({}, arr[idx], incoming, { updatedBy: me.name, updatedAt: now });
+              var editHistory = pushHistory(arr[idx].history, { at: now, by: me.name, action: "update" });
+              arr[idx] = Object.assign({}, arr[idx], incoming, { updatedBy: me.name, updatedAt: now, history: editHistory });
             } else {
-              arr.push(Object.assign({}, incoming, { createdBy: me.name, createdAt: now, updatedBy: me.name, updatedAt: now }));
+              var createHistory = pushHistory(null, { at: now, by: me.name, action: "create" });
+              arr.push(Object.assign({}, incoming, { createdBy: me.name, createdAt: now, updatedBy: me.name, updatedAt: now, history: createHistory }));
             }
           } else {
             var prefix = MODULE_PREFIX[moduleKey];
             state.counters[prefix] = (state.counters[prefix] || 0) + 1;
             var newId = prefix + "-" + String(state.counters[prefix]).padStart(4, "0");
             delete incoming.id;
-            arr.push(Object.assign({}, incoming, { id: newId, createdBy: me.name, createdAt: now, updatedBy: me.name, updatedAt: now }));
+            var newHistory = pushHistory(null, { at: now, by: me.name, action: "create" });
+            arr.push(Object.assign({}, incoming, { id: newId, createdBy: me.name, createdAt: now, updatedBy: me.name, updatedAt: now, history: newHistory }));
           }
         } else if (body.op === "delete") {
+          // Soft delete: flag it and leave it in place so it can be
+          // recovered from the recycle bin — see shapeForClient() above.
           if (!body.id) throw badRequest(400, { error: "bad_id" });
-          state[moduleKey] = arr.filter(function (r) {
-            return r.id !== body.id;
-          });
+          var delIdx = arr.findIndex(function (r) { return r.id === body.id; });
+          if (delIdx === -1) throw badRequest(404, { error: "not_found" });
+          var delHistory = pushHistory(arr[delIdx].history, { at: now, by: me.name, action: "delete" });
+          arr[delIdx] = Object.assign({}, arr[delIdx], { deleted: true, deletedAt: now, deletedBy: me.name, history: delHistory });
+        } else if (body.op === "restore") {
+          if (!body.id) throw badRequest(400, { error: "bad_id" });
+          var resIdx = arr.findIndex(function (r) { return r.id === body.id && r.deleted; });
+          if (resIdx === -1) throw badRequest(404, { error: "not_found" });
+          var restored = Object.assign({}, arr[resIdx]);
+          restored.history = pushHistory(restored.history, { at: now, by: me.name, action: "restore" });
+          delete restored.deleted;
+          delete restored.deletedAt;
+          delete restored.deletedBy;
+          restored.updatedBy = me.name;
+          restored.updatedAt = now;
+          arr[resIdx] = restored;
+        } else if (body.op === "purge") {
+          // Permanent delete — only allowed on a record that's ALREADY in
+          // the recycle bin (deleted:true). This two-step requirement
+          // (delete, then purge from the bin) is a deliberate guard against
+          // accidentally wiping a record with no way back.
+          if (!body.id) throw badRequest(400, { error: "bad_id" });
+          var purgeIdx = arr.findIndex(function (r) { return r.id === body.id; });
+          if (purgeIdx === -1) throw badRequest(404, { error: "not_found" });
+          if (!arr[purgeIdx].deleted) throw badRequest(400, { error: "not_in_trash", message: "只能彻底删除回收站里的记录" });
+          state[moduleKey] = arr.filter(function (r) { return r.id !== body.id; });
         } else {
           throw badRequest(400, { error: "bad_op" });
         }
@@ -150,7 +210,7 @@ module.exports = async function handler(req, res) {
         return { value: state };
       });
 
-      res.status(200).json({ state: result.value, user: me });
+      res.status(200).json({ state: shapeForClient(result.value, me), user: me });
       return;
     }
 
