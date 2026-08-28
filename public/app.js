@@ -892,7 +892,9 @@
       modal:null, confirmDelete:null,
       repairsViewMode:"list",
       calendarCursor:{y:now.getFullYear(), m:now.getMonth()},
-      calendarSelectedDate:null
+      calendarSelectedDate:null,
+      trackersViewMode:"list",
+      ganttZoom:"week"
     };
   }
   function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
@@ -1639,6 +1641,7 @@
 
   function renderModuleView(moduleKey){
     if(moduleKey === "repairs") return renderRepairsView();
+    if(moduleKey === "trackers") return renderTrackersView();
     var mod = MODULES[moduleKey];
     var list = getFiltered(moduleKey).slice().reverse();
     var wd = writeDisabled();
@@ -1766,6 +1769,180 @@
       + '</div></div>'
       + listHtml
       + '</div>';
+  }
+
+  /* --- 追踪记录: list / 甘特图 toggle --------------------------------------
+     Same pattern as repairs' list/calendar toggle. The Gantt view plots
+     each tracked item as a bar from its creation date (r.createdAt — the
+     only "start" a tracker record has; there's no separate start-date
+     field) to its 预计完成日期 (r.dueDate, the bar's end). Items with no
+     due date can't be plotted at all — they're counted and called out
+     with a note instead of silently vanishing. */
+
+  var GANTT_LAST = null; // {rangeStart:Date, dayWidth:number} from the most recent render, for the "回到今天" scroll action
+
+  function ganttDayWidth(){ return (UI.ganttZoom === "month") ? 26 : 44; }
+  function ganttDaysBetween(a, b){ return Math.round((b - a) / 86400000); }
+  function ganttAddDays(d, n){ var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function ganttDateOnly(d){ var r = new Date(d); r.setHours(0,0,0,0); return r; }
+
+  function renderTrackersView(){
+    var mod = MODULES.trackers;
+    var mode = UI.trackersViewMode || "list";
+    var wd = writeDisabled();
+    var modLabel = T(mod.label), modSingular = T(mod.singular);
+    var searchPlaceholder = T3("搜索"+modLabel+"…", "Search "+modLabel+"…", "Cari "+modLabel+"…");
+    var newBtnLabel = T3("+ 新建"+modSingular, "+ New "+modSingular, "+ "+modSingular+" Baharu");
+    var toggle = '<div class="view-mode-toggle">'
+      + '<button type="button" class="btn btn-sm '+(mode==="list"?"btn-primary":"btn-ghost")+'" onclick="app.setTrackersViewMode(\'list\')">'+esc(T3("列表","List","Senarai"))+'</button>'
+      + '<button type="button" class="btn btn-sm '+(mode==="gantt"?"btn-primary":"btn-ghost")+'" onclick="app.setTrackersViewMode(\'gantt\')">'+esc(T3("甘特图","Gantt","Gantt"))+'</button>'
+      + '</div>';
+    var header = '<div class="view-header">'
+      + '<h2 class="view-title">'+esc(modLabel)+' <span class="view-count num">'+STATE.trackers.length+'</span></h2>'
+      + '<div class="view-tools">'
+      + toggle
+      + (mode === "list" ? (
+          '<input class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search.trackers||"")+'" oninput="app.setSearch(\'trackers\', this.value)">'
+          + '<button class="btn btn-ghost" onclick="app.exportModule(\'trackers\')">'+esc(T("导出全部"))+'</button>'
+        ) : '')
+      + '<button class="btn btn-primary" onclick="app.openModal(\'trackers\', null)" '+wd+'>'+esc(newBtnLabel)+'</button>'
+      + '</div></div>';
+    if(mode === "gantt") return header + renderFlaggedPanel() + renderTrackersGantt();
+    var list = getFiltered("trackers").slice().reverse();
+    return header + renderFlaggedPanel() + (list.length
+      ? '<div class="card-grid">' + list.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
+      : '<div class="empty-state">'+esc(T(mod.emptyText))+'</div>');
+  }
+
+  function renderTrackersGantt(){
+    var all = STATE.trackers || [];
+    if(!all.length){
+      return '<div class="empty-state">'+esc(T(MODULES.trackers.emptyText))+'</div>';
+    }
+    var tasks = [];
+    var noDueCount = 0;
+    all.forEach(function(r){
+      if(!r.dueDate){ noDueCount++; return; }
+      var startStr = (r.createdAt ? r.createdAt.slice(0,10) : r.dueDate);
+      var start = ganttDateOnly(new Date(startStr+"T00:00:00"));
+      var end = ganttDateOnly(new Date(r.dueDate+"T00:00:00"));
+      if(isNaN(start.getTime()) || isNaN(end.getTime())) { noDueCount++; return; }
+      if(end < start) end = start; // clamp: don't draw an inverted bar if data is inconsistent
+      tasks.push({ r:r, start:start, end:end });
+    });
+
+    var note = noDueCount
+      ? '<p class="gantt-exclude-note">'+esc(T3(
+          noDueCount+" 条追踪事项没有填「预计完成日期」，不会出现在甘特图上——到列表模式补上日期就会显示。",
+          noDueCount+" tracked item(s) have no due date set, so they can't be plotted here — fill one in from the list view and they'll appear.",
+          noDueCount+" item dijejak tiada tarikh siap dijangka, jadi tidak dapat dipaparkan di sini — isi satu dari paparan senarai dan ia akan muncul."
+        ))+'</p>'
+      : '';
+
+    if(!tasks.length){
+      return note + '<div class="empty-state">'+esc(T3(
+        "现有的追踪事项都还没有填「预计完成日期」，暂时没有可以画进甘特图的记录。",
+        "None of the current tracked items have a due date yet, so there's nothing to plot on the Gantt chart yet.",
+        "Tiada item dijejak semasa mempunyai tarikh siap dijangka lagi, jadi tiada apa untuk diplot pada carta Gantt lagi."
+      ))+'</div>';
+    }
+
+    var today = ganttDateOnly(new Date());
+    var minStart = tasks.reduce(function(m,t){ return t.start < m ? t.start : m; }, tasks[0].start);
+    var maxEnd = tasks.reduce(function(m,t){ return t.end > m ? t.end : m; }, tasks[0].end);
+    var rangeStart = ganttAddDays(minStart < today ? minStart : today, -4);
+    var rangeEnd = ganttAddDays(maxEnd > today ? maxEnd : today, 10);
+
+    var dw = ganttDayWidth();
+    var totalDays = ganttDaysBetween(rangeStart, rangeEnd) + 1;
+    var totalWidth = totalDays * dw;
+    GANTT_LAST = { rangeStart: rangeStart, dayWidth: dw };
+
+    var weekdayNames = WEEKDAY_NAMES[LANG] || WEEKDAY_NAMES.zh;
+    var monthNamesZh = null; // zh months are rendered inline as "N 月" below
+
+    // month bands
+    var monthHtml = "";
+    var cursor = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), 1);
+    var rangeEndExclusive = ganttAddDays(rangeEnd, 1);
+    while(cursor < rangeEndExclusive){
+      var monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+      var monthEndExclusive = new Date(cursor.getFullYear(), cursor.getMonth()+1, 1);
+      var bandStart = monthStart < rangeStart ? rangeStart : monthStart;
+      var bandEndExclusive = monthEndExclusive > rangeEndExclusive ? rangeEndExclusive : monthEndExclusive;
+      var left = ganttDaysBetween(rangeStart, bandStart) * dw;
+      var width = ganttDaysBetween(bandStart, bandEndExclusive) * dw;
+      var label = LANG === "zh" ? ((cursor.getMonth()+1)+" 月") : (MONTH_NAMES[LANG][cursor.getMonth()]);
+      monthHtml += '<div class="month-band" style="left:'+left+'px; width:'+width+'px;">'+esc(label)+'</div>';
+      cursor = monthEndExclusive;
+    }
+
+    // day ticks
+    var tickHtml = "";
+    for(var i=0;i<totalDays;i++){
+      var d = ganttAddDays(rangeStart, i);
+      var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      var showLabel = UI.ganttZoom !== "month" || d.getDate() === 1 || d.getDay() === 1;
+      tickHtml += '<div class="day-tick'+(isWeekend?" weekend":"")+'" style="left:'+(i*dw)+'px; width:'+dw+'px;">'
+        + (showLabel ? '<span class="dow">'+esc(weekdayNames[d.getDay()])+'</span><span class="dom num">'+d.getDate()+'</span>' : '')
+        + '</div>';
+    }
+
+    // rail + rows
+    var railHtml = '<div class="rail-head">'+esc(T("追踪事项"))+'</div>';
+    var rowsHtml = "";
+    tasks.forEach(function(t){
+      var r = t.r;
+      var colorKey = MODULES.trackers.statusColors[r.status] || "neutral";
+      var left = ganttDaysBetween(rangeStart, t.start) * dw;
+      var width = Math.max(ganttDaysBetween(t.start, t.end)+1, 1) * dw - 6;
+      var tipText = (r.issue||T("追踪事项")) + " · " + (r.department?T(r.department):"") + " · " + (r.owner||"") + " · "
+        + dateToStr(t.start) + " → " + dateToStr(t.end) + " · " + T(r.status||"");
+      railHtml += '<div class="rail-row">'
+        + '<div class="rail-title">'+esc(r.issue||T("(未命名)"))+'</div>'
+        + '<div class="rail-meta">'+(r.department?'<span class="rail-dept">'+esc(T(r.department))+'</span>':'')+'<span>'+esc(r.owner||"")+'</span></div>'
+        + '</div>';
+      var lineStep = UI.ganttZoom === "month" ? 7 : 7;
+      var vlines = "";
+      for(var vi=0; vi<=totalDays; vi+=lineStep){ vlines += '<div class="grid-vline" style="left:'+(vi*dw)+'px;"></div>'; }
+      rowsHtml += '<div class="grid-row" style="width:'+totalWidth+'px;">'
+        + vlines
+        + '<div class="bar" style="left:'+(left+3)+'px; width:'+width+'px; --bar-color:var(--'+colorKey+');" title="'+esc(tipText)+'" onclick="app.openModal(\'trackers\',\''+r.id+'\')">'
+        + '<span class="bar-label">'+esc(r.issue||T("(未命名)"))+'</span>'
+        + '</div></div>';
+    });
+
+    // today line, spans the full row height
+    var todayHtml = "";
+    var todayOffset = ganttDaysBetween(rangeStart, today);
+    if(todayOffset >= 0 && todayOffset <= totalDays){
+      var totalHeight = tasks.length * 56;
+      todayHtml = '<div class="today-line" style="left:'+(todayOffset*dw)+'px; height:'+totalHeight+'px;">'
+        + '<span class="today-flag">'+esc(T3("今天","Today","Hari Ini"))+'</span></div>';
+    }
+
+    var toolbar = '<div class="gantt-toolbar">'
+      + '<div class="legend">'
+        + '<div class="legend-item"><span class="legend-dot" style="background:var(--warn)"></span>'+esc(T("待处理"))+'</div>'
+        + '<div class="legend-item"><span class="legend-dot" style="background:var(--accent)"></span>'+esc(T("进行中"))+'</div>'
+        + '<div class="legend-item"><span class="legend-dot" style="background:var(--good)"></span>'+esc(T("已完成"))+'</div>'
+        + '<div class="legend-item"><span class="legend-dot" style="background:var(--seal)"></span>'+esc(T("已延误"))+'</div>'
+      + '</div>'
+      + '<div class="gantt-toolbar-right">'
+        + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.ganttScrollToday()">'+esc(T3("回到今天","Today","Hari Ini"))+'</button>'
+        + '<div class="zoom-group">'
+          + '<button type="button" class="zoom-btn'+(UI.ganttZoom!=="month"?" active":"")+'" onclick="app.setGanttZoom(\'week\')">'+esc(T3("按周","Week","Minggu"))+'</button>'
+          + '<button type="button" class="zoom-btn'+(UI.ganttZoom==="month"?" active":"")+'" onclick="app.setGanttZoom(\'month\')">'+esc(T3("按月","Month","Bulan"))+'</button>'
+        + '</div>'
+      + '</div></div>';
+
+    return note + toolbar
+      + '<div class="gantt-panel"><div class="gantt-scroll" id="ganttScroll">'
+      + '<div class="gantt-rail">'+railHtml+'</div>'
+      + '<div class="gantt-body">'
+        + '<div class="grid-head" style="width:'+totalWidth+'px;">'+monthHtml+tickHtml+'</div>'
+        + '<div class="grid-rows">'+rowsHtml+todayHtml+'</div>'
+      + '</div></div></div>';
   }
 
   function renderStatCard(c){
@@ -2078,6 +2255,23 @@
   function selectCalendarDate(dateStr){
     UI.calendarSelectedDate = (UI.calendarSelectedDate === dateStr) ? null : dateStr;
     render();
+  }
+  function setTrackersViewMode(mode){
+    UI.trackersViewMode = (mode === "gantt") ? "gantt" : "list";
+    render();
+    if(mode === "gantt") setTimeout(ganttScrollToday, 0);
+  }
+  function setGanttZoom(zoom){
+    UI.ganttZoom = (zoom === "month") ? "month" : "week";
+    render();
+    setTimeout(ganttScrollToday, 0);
+  }
+  function ganttScrollToday(){
+    var el = document.getElementById("ganttScroll");
+    if(!el || !GANTT_LAST) return;
+    var today = ganttDateOnly(new Date());
+    var offset = ganttDaysBetween(GANTT_LAST.rangeStart, today) * GANTT_LAST.dayWidth;
+    el.scrollLeft = Math.max(0, offset - 220);
   }
   function openModal(moduleKey, id, draft){ UI.modal = {module:moduleKey, id: id || null, draft: draft || null}; render(); }
 
@@ -2392,7 +2586,8 @@
     setLang: setLang,
     exportRecord: exportRecord, exportModule: exportModule,
     sendWhatsAppReminder: sendWhatsAppReminder,
-    setRepairsViewMode: setRepairsViewMode, calendarNav: calendarNav, selectCalendarDate: selectCalendarDate
+    setRepairsViewMode: setRepairsViewMode, calendarNav: calendarNav, selectCalendarDate: selectCalendarDate,
+    setTrackersViewMode: setTrackersViewMode, setGanttZoom: setGanttZoom, ganttScrollToday: ganttScrollToday
   };
 
   if(document.readyState === "loading"){
