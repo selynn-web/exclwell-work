@@ -903,6 +903,7 @@
   var MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
   var CURRENT_USER = null;
   var ACCOUNTS = { list:null, loading:false, error:null, editingId:null };
+  var EMAIL_TEST = { sending:false };
   // Lightweight {name, phone} directory from every account that has a phone
   // set, refreshed alongside the normal state poll. Available to any logged
   // -in teammate (unlike the full ACCOUNTS list, which needs 账号管理
@@ -2259,7 +2260,61 @@
       + '<button type="submit" class="btn btn-primary" '+wd+'>'+esc(T("添加"))+'</button>'
       + '</form>'
       + '</div>'
+      + renderEmailReminderPanel()
       + rows;
+  }
+
+  // Admin-only panel for the automatic daily email digest (追踪记录 /
+  // 车辆到期 / 设备校准到期). Unlike WhatsApp reminders, this actually
+  // sends on its own once RESEND_API_KEY + REMINDER_EMAIL_TO are set as
+  // Vercel environment variables (see README) — this button just lets the
+  // person setting it up confirm it works, without waiting for tomorrow's
+  // scheduled run.
+  function renderEmailReminderPanel(){
+    var btnLabel = EMAIL_TEST.sending
+      ? T3("发送中…","Sending…","Menghantar…")
+      : T3("发送测试提醒邮件","Send test reminder email","Hantar e-mel ujian");
+    return '<div class="panel" style="margin-bottom:18px;">'
+      + '<h3 class="panel-title">'+esc(T3("邮件提醒","Email reminders","Peringatan e-mel"))+'</h3>'
+      + '<p class="external-desc">'+esc(T3(
+          "每天自动检查追踪记录、车辆路税/保险到期和设备校准到期，发一封总览邮件给管理员。需要先在 Vercel 环境变量里设置 RESEND_API_KEY 和 REMINDER_EMAIL_TO（步骤见 README）。设置好之后可以点下面的按钮先发一封测试邮件确认。",
+          "Automatically checks trackers, vehicle road tax/insurance and equipment calibration due dates every day, and sends one summary email to the admin. Needs RESEND_API_KEY and REMINDER_EMAIL_TO set as Vercel environment variables first (steps in README). Once set up, use the button below to send a test email and confirm it works.",
+          "Menyemak rekod penjejakan, cukai jalan/insurans kenderaan dan tarikh kalibrasi peralatan secara automatik setiap hari, dan menghantar satu e-mel ringkasan kepada pentadbir. Perlu RESEND_API_KEY dan REMINDER_EMAIL_TO ditetapkan sebagai pembolehubah persekitaran Vercel dahulu (langkah dalam README). Selepas ditetapkan, gunakan butang di bawah untuk menghantar e-mel ujian."
+        ))+'</p>'
+      + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.sendTestReminderEmail()" '+(EMAIL_TEST.sending?'disabled':'')+'>'+esc(btnLabel)+'</button>'
+      + '</div>';
+  }
+
+  function sendTestReminderEmail(){
+    if(EMAIL_TEST.sending) return;
+    EMAIL_TEST.sending = true;
+    render();
+    fetch("/api/cron/reminders?manual=1", { credentials:"same-origin" })
+      .then(function(res){
+        return res.json().catch(function(){ return null; }).then(function(data){ return { status:res.status, data:data }; });
+      })
+      .then(function(result){
+        EMAIL_TEST.sending = false;
+        var data = result.data || {};
+        if(result.status === 200 && data.sent){
+          toast(T3("测试邮件已发送，请查收","Test email sent — check the inbox","E-mel ujian telah dihantar"));
+        } else if(data.reason === "not_configured"){
+          toast(T3(
+            "还没有配置邮件提醒，请先在 Vercel 环境变量里设置 RESEND_API_KEY 和 REMINDER_EMAIL_TO",
+            "Email reminders aren't configured yet — set RESEND_API_KEY and REMINDER_EMAIL_TO in Vercel first",
+            "Peringatan e-mel belum ditetapkan — sila tetapkan RESEND_API_KEY dan REMINDER_EMAIL_TO dahulu"
+          ));
+        } else {
+          var detail = data.message || data.error || "";
+          toast(T3("发送失败："+detail, "Send failed: "+detail, "Gagal menghantar: "+detail));
+        }
+        render();
+      })
+      .catch(function(){
+        EMAIL_TEST.sending = false;
+        toast(T3("发送失败，请检查网络","Send failed — check the connection","Gagal menghantar — sila semak sambungan"));
+        render();
+      });
   }
 
   function togglePermEdit(id){
@@ -2811,6 +2866,7 @@
   window.app = {
     setView: setView, setSearch: setSearch, openModal: openModal, closeModal: closeModal,
     setGlobalSearch: setGlobalSearch, clearGlobalSearch: clearGlobalSearch, jumpToSearchResult: jumpToSearchResult,
+    sendTestReminderEmail: sendTestReminderEmail,
     requestDelete: requestDelete, cancelDelete: cancelDelete, confirmDeleteNow: confirmDeleteNow,
     requestPurge: requestPurge, toggleTrash: toggleTrash, restoreRecord: restoreRecord,
     submitForm: submitForm, onMeetingTypeChange: onMeetingTypeChange,
