@@ -31,6 +31,8 @@
     "人事部门": {en:"HR Department", ms:"Jabatan Sumber Manusia"},
     "采购部门": {en:"Procurement Department", ms:"Jabatan Perolehan"},
     "其他部门": {en:"Other Department", ms:"Jabatan Lain"},
+    "品管部": {en:"Quality Dept.", ms:"Jabatan Kualiti"},
+    "维修部": {en:"Maintenance Dept.", ms:"Jabatan Penyelenggaraan"},
     "大豆": {en:"Soy", ms:"Soya"},
     "面筋": {en:"Gluten", ms:"Gluten"},
     "包装": {en:"Packaging", ms:"Pembungkusan"},
@@ -828,7 +830,18 @@
       emptyText:'暂无车辆记录，点击"新建车辆"登记公司车辆的路税与保险到期日，系统会自动提示即将到期或已逾期的车辆。'
     }
   };
-  var NAV_ORDER = ["overview","meetings","sops","inspections","complaints","calibrations","repairs","traces","vehicles","damages","trackers","leaves","accounts"];
+  // Sidebar nav, grouped by department. A group with label:null renders its
+  // items with no section header (same flat look as before); a labeled
+  // group gets a small header above its items. Groups (and headers) with
+  // zero currently-visible items (module permissions) are skipped entirely
+  // in renderSidebar — see isModuleAllowed() there.
+  var NAV_GROUPS = [
+    { label:null, keys:["overview","meetings"] },
+    { label:"品管部", keys:["sops","inspections","damages"] },
+    { label:"维修部", keys:["calibrations","repairs"] },
+    { label:null, keys:["complaints","traces","vehicles","trackers","leaves","accounts"] }
+  ];
+  var NAV_ORDER = NAV_GROUPS.reduce(function(acc, g){ return acc.concat(g.keys); }, []);
   var LEAVE_APP_URL = "https://exclwell-leave-app.vercel.app/";
   var EXTERNAL_VIEWS = {
     leaves: { label:"请假管理", url: LEAVE_APP_URL, title:"请假申请已迁移至独立系统",
@@ -1405,18 +1418,25 @@
     return statuses.map(function(s){ return T(s)+" "+arr.filter(function(x){return x.status===s;}).length; }).join(" · ");
   }
 
+  function renderNavItem(key){
+    var isOverview = key === "overview";
+    var isExternal = !!EXTERNAL_VIEWS[key];
+    var isInternal = !!INTERNAL_VIEWS[key];
+    var label = isOverview ? T("总览") : (isExternal ? T(EXTERNAL_VIEWS[key].label) : (isInternal ? T(INTERNAL_VIEWS[key].label) : T(MODULES[key].label)));
+    var count = (isOverview || isExternal || isInternal) ? null : STATE[key].length;
+    var active = UI.view === key;
+    return '<button class="nav-item '+(active?"nav-item-active":"")+'" onclick="app.setView(\''+key+'\')">'
+      + '<span class="nav-label">'+esc(label)+'</span>'
+      + (count!==null ? '<span class="nav-count num">'+count+'</span>' : (isExternal ? '<span class="nav-ext">'+esc(T("外部 ↗"))+'</span>' : ''))
+      + '</button>';
+  }
+
   function renderSidebar(){
-    var items = NAV_ORDER.filter(function(key){ return isModuleAllowed(key); }).map(function(key){
-      var isOverview = key === "overview";
-      var isExternal = !!EXTERNAL_VIEWS[key];
-      var isInternal = !!INTERNAL_VIEWS[key];
-      var label = isOverview ? T("总览") : (isExternal ? T(EXTERNAL_VIEWS[key].label) : (isInternal ? T(INTERNAL_VIEWS[key].label) : T(MODULES[key].label)));
-      var count = (isOverview || isExternal || isInternal) ? null : STATE[key].length;
-      var active = UI.view === key;
-      return '<button class="nav-item '+(active?"nav-item-active":"")+'" onclick="app.setView(\''+key+'\')">'
-        + '<span class="nav-label">'+esc(label)+'</span>'
-        + (count!==null ? '<span class="nav-count num">'+count+'</span>' : (isExternal ? '<span class="nav-ext">'+esc(T("外部 ↗"))+'</span>' : ''))
-        + '</button>';
+    var items = NAV_GROUPS.map(function(g){
+      var keys = g.keys.filter(function(key){ return isModuleAllowed(key); });
+      if(!keys.length) return ""; // whole group hidden if nothing in it is visible to this account
+      var header = g.label ? '<div class="nav-section-label">'+esc(T(g.label))+'</div>' : "";
+      return header + keys.map(renderNavItem).join("");
     }).join("");
     return '<div class="brand">'+esc(T("团队档案台"))+'<span class="brand-sub">'+esc(T("会议 · SOP · 品质 · 设备"))+'</span></div><nav class="nav">'+items+'</nav>'
       + renderLangSwitcher("lang-switch-sidebar");
