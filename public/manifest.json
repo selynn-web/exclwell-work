@@ -1,0 +1,16 @@
+{
+  "name": "团队档案台",
+  "short_name": "档案台",
+  "description": "团队日常运营记录 · 会议 / SOP / 品管 / 设备维修与校准 / 车辆管理",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F1ECDE",
+  "theme_color": "#2C4A52",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

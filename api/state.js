@@ -55,6 +55,16 @@ function pushHistory(existing, entry) {
   return next;
 }
 
+// Per-record discussion thread — deliberately separate from `history`
+// above: history is a terse audit trail ("who changed this, when"),
+// comments are free-text conversation between teammates about the record.
+// Capped the same way and for the same reason (one record's storage can't
+// grow unbounded over years of use).
+var MAX_COMMENTS = 50;
+function genCommentId() {
+  return "cmt-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
 function badRequest(status, body) {
   var err = new Error(body.error || "bad_request");
   err.httpStatus = status;
@@ -221,6 +231,23 @@ module.exports = async function handler(req, res) {
           restored.updatedBy = me.name;
           restored.updatedAt = now;
           arr[resIdx] = restored;
+        } else if (body.op === "comment") {
+          if (!body.id) throw badRequest(400, { error: "bad_id" });
+          var text = String(body.text || "").trim();
+          if (!text) throw badRequest(400, { error: "empty_comment" });
+          if (text.length > 2000) text = text.slice(0, 2000);
+          var cmtIdx = arr.findIndex(function (r) { return r.id === body.id; });
+          if (cmtIdx === -1) throw badRequest(404, { error: "not_found" });
+          var newComment = { id: genCommentId(), at: now, by: me.name, text: text };
+          var nextComments = (Array.isArray(arr[cmtIdx].comments) ? arr[cmtIdx].comments.slice() : []).concat([newComment]);
+          if (nextComments.length > MAX_COMMENTS) nextComments = nextComments.slice(nextComments.length - MAX_COMMENTS);
+          arr[cmtIdx] = Object.assign({}, arr[cmtIdx], { comments: nextComments });
+        } else if (body.op === "deleteComment") {
+          if (!body.id || !body.commentId) throw badRequest(400, { error: "bad_id" });
+          var dcIdx = arr.findIndex(function (r) { return r.id === body.id; });
+          if (dcIdx === -1) throw badRequest(404, { error: "not_found" });
+          var keptComments = (Array.isArray(arr[dcIdx].comments) ? arr[dcIdx].comments : []).filter(function (c) { return c.id !== body.commentId; });
+          arr[dcIdx] = Object.assign({}, arr[dcIdx], { comments: keptComments });
         } else if (body.op === "purge") {
           // Permanent delete — only allowed on a record that's ALREADY in
           // the recycle bin (deleted:true). This two-step requirement
