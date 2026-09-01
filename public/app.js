@@ -900,7 +900,10 @@
   var transientStatus = null; // null | saving | error
   var toastTimer = null;
   var pollTimer = null;
-  var MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+  var MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024; // final stored-size safety cap, kept as a backstop after compression
+  var PHOTO_MAX_DIMENSION = 1600; // long edge in px — plenty for a documentation thumbnail/full view, not for print
+  var PHOTO_JPEG_QUALITY = 0.8;
+  var PHOTO_SKIP_COMPRESS_BELOW = 300 * 1024; // already small enough, not worth the round-trip
   var CURRENT_USER = null;
   var ACCOUNTS = { list:null, loading:false, error:null, editingId:null };
   var EMAIL_TEST = { sending:false };
@@ -996,28 +999,99 @@
     return new Blob([bytes], {type: mime});
   }
 
+  function readFileAsDataURL(file){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(){ resolve(reader.result); };
+      reader.onerror = function(){ reject(new Error("file_read_failed")); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Photos straight off a phone camera are commonly several MB — far more
+  // resolution than anyone needs for a documentation thumbnail, and this
+  // app stores attachments as base64 text inline in one JSON blob (see
+  // shapeForClient() in api/state.js), so every uncompressed photo directly
+  // bloats that blob and the 20-second poll payload for good. Downscaling
+  // + re-encoding as JPEG in the browser before upload cuts a typical
+  // phone photo by 80-90% with no visible quality loss for this use case,
+  // so more photos clear the 4MB cap too. Returns null (caller falls back
+  // to storing the original file untouched) if the browser can't do this
+  // step — createImageBitmap is missing, decoding fails, anything.
+  function compressImageFile(file){
+    if(!window.createImageBitmap) return Promise.resolve(null);
+    return window.createImageBitmap(file, { imageOrientation:"from-image" }).then(function(bitmap){
+      var scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+      var w = Math.max(1, Math.round(bitmap.width * scale));
+      var h = Math.max(1, Math.round(bitmap.height * scale));
+      var canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext("2d");
+      if(!ctx){ if(bitmap.close) bitmap.close(); return null; }
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      if(bitmap.close) bitmap.close();
+      return new Promise(function(resolve){
+        canvas.toBlob(function(blob){
+          if(!blob){ resolve(null); return; }
+          readFileAsDataURL(blob).then(function(dataUrl){
+            resolve({ dataUrl:dataUrl, size:blob.size });
+          }).catch(function(){ resolve(null); });
+        }, "image/jpeg", PHOTO_JPEG_QUALITY);
+      });
+    }).catch(function(){ return null; });
+  }
+
   function handleFileSelect(event, inputEl){
     var file = event.target.files && event.target.files[0];
     if(!file) return;
-    if(file.size > MAX_ATTACHMENT_BYTES){
-      toast(T("文件太大，附件请控制在 4MB 以内"));
-      event.target.value = "";
-      return;
-    }
+
     var container = inputEl.closest(".file-field");
     if(!container) return;
     var targetName = container.getAttribute("data-target");
     var form = container.closest("form");
     var hidden = form ? form.elements[targetName] : null;
     var statusEl = container.querySelector(".file-status");
-    var reader = new FileReader();
-    reader.onload = function(){
-      var payload = JSON.stringify({ name:file.name, type:file.type||"application/octet-stream", size:file.size, data:reader.result });
+
+    function storeRaw(){
+      if(file.size > MAX_ATTACHMENT_BYTES){
+        toast(T("文件太大，附件请控制在 4MB 以内"));
+        event.target.value = "";
+        return;
+      }
+      readFileAsDataURL(file).then(function(dataUrl){
+        var payload = JSON.stringify({ name:file.name, type:file.type||"application/octet-stream", size:file.size, data:dataUrl });
+        if(hidden) hidden.value = payload;
+        if(statusEl) statusEl.innerHTML = renderFileStatus(file.name, file.size, true);
+      }).catch(function(){ toast(T("文件读取失败，请重试")); });
+    }
+
+    var isImage = /^image\//.test(file.type);
+    if(!isImage || file.size <= PHOTO_SKIP_COMPRESS_BELOW){
+      // Not a photo (e.g. a document-type attachment field), or already
+      // small enough that compressing wouldn't meaningfully help — store
+      // as-is, same as before this existed.
+      storeRaw();
+      return;
+    }
+
+    compressImageFile(file).then(function(result){
+      if(!result || result.size >= file.size){
+        // Compression unsupported/failed, or — rarely, for an already
+        // efficient image — didn't actually shrink it. Fall back to the
+        // original file untouched rather than storing something bigger.
+        storeRaw();
+        return;
+      }
+      if(result.size > MAX_ATTACHMENT_BYTES){
+        toast(T("照片还是太大，请换一张再试"));
+        event.target.value = "";
+        return;
+      }
+      var jpgName = file.name.replace(/\.[a-zA-Z0-9]+$/, "") + ".jpg";
+      var payload = JSON.stringify({ name:jpgName, type:"image/jpeg", size:result.size, data:result.dataUrl });
       if(hidden) hidden.value = payload;
-      if(statusEl) statusEl.innerHTML = renderFileStatus(file.name, file.size, true);
-    };
-    reader.onerror = function(){ toast(T("文件读取失败，请重试")); };
-    reader.readAsDataURL(file);
+      if(statusEl) statusEl.innerHTML = renderFileStatus(jpgName, result.size, true);
+    });
   }
 
   function removeAttachment(btn){
@@ -1765,8 +1839,13 @@
 
   /* --- 回收站：软删除后可以恢复，直到有人手动彻底删除 ------------------- */
 
+  // The count badge comes from STATE.trashCounts, which is cheap and
+  // present on every normal state fetch — unlike the actual trashed
+  // records (STATE.trash[moduleKey]), which are only loaded on demand
+  // (see toggleTrash()) so routine polling doesn't have to ship every
+  // deleted record, photos included, on every request.
   function renderTrashToggle(moduleKey){
-    var count = ((STATE.trash && STATE.trash[moduleKey]) || []).length;
+    var count = (STATE.trashCounts && STATE.trashCounts[moduleKey]) || 0;
     return '<button type="button" class="btn btn-ghost btn-sm" onclick="app.toggleTrash(\''+moduleKey+'\')">'
       + '🗑 ' + esc(T("回收站")) + (count ? ' <span class="trash-count num">'+count+'</span>' : '')
       + '</button>';
@@ -1776,23 +1855,29 @@
     if(!UI.trashOpen[moduleKey]) return "";
     var wd = writeDisabled();
     var mod = MODULES[moduleKey];
-    var items = ((STATE.trash && STATE.trash[moduleKey]) || []).slice().reverse();
-    var body = items.length
-      ? '<div class="trash-list">' + items.map(function(r){
-          var title = r[mod.titleField] || r.id;
-          var meta = r.deletedBy ? (T("删除：")+r.deletedBy+(r.deletedAt?(" ("+r.deletedAt.slice(0,10)+")"):"")) : "";
-          return '<div class="trash-row">'
-            + '<div class="trash-row-main">'
-              + '<span class="card-id num">'+esc(r.id)+'</span>'
-              + '<span class="trash-row-title">'+esc(title)+'</span>'
-              + (meta ? '<span class="trash-row-meta">'+esc(meta)+'</span>' : '')
-            + '</div>'
-            + '<div class="trash-row-actions">'
-              + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.restoreRecord(\''+moduleKey+'\',\''+r.id+'\')" '+wd+'>'+esc(T("恢复"))+'</button>'
-              + '<button type="button" class="btn btn-danger btn-sm" onclick="app.requestPurge(\''+moduleKey+'\',\''+r.id+'\')" '+wd+'>'+esc(T("彻底删除"))+'</button>'
-            + '</div></div>';
-        }).join("") + '</div>'
-      : '<p class="trash-empty">'+esc(T("回收站是空的"))+'</p>';
+    var loaded = !!(STATE.trash && STATE.trash[moduleKey]);
+    var body;
+    if(!loaded){
+      body = '<p class="trash-empty">'+esc(T("加载中…"))+'</p>';
+    } else {
+      var items = STATE.trash[moduleKey].slice().reverse();
+      body = items.length
+        ? '<div class="trash-list">' + items.map(function(r){
+            var title = r[mod.titleField] || r.id;
+            var meta = r.deletedBy ? (T("删除：")+r.deletedBy+(r.deletedAt?(" ("+r.deletedAt.slice(0,10)+")"):"")) : "";
+            return '<div class="trash-row">'
+              + '<div class="trash-row-main">'
+                + '<span class="card-id num">'+esc(r.id)+'</span>'
+                + '<span class="trash-row-title">'+esc(title)+'</span>'
+                + (meta ? '<span class="trash-row-meta">'+esc(meta)+'</span>' : '')
+              + '</div>'
+              + '<div class="trash-row-actions">'
+                + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.restoreRecord(\''+moduleKey+'\',\''+r.id+'\')" '+wd+'>'+esc(T("恢复"))+'</button>'
+                + '<button type="button" class="btn btn-danger btn-sm" onclick="app.requestPurge(\''+moduleKey+'\',\''+r.id+'\')" '+wd+'>'+esc(T("彻底删除"))+'</button>'
+              + '</div></div>';
+          }).join("") + '</div>'
+        : '<p class="trash-empty">'+esc(T("回收站是空的"))+'</p>';
+    }
     return '<div class="panel trash-panel"><h3 class="panel-title">'+esc(T("回收站"))+'</h3>'+body+'</div>';
   }
 
@@ -2542,8 +2627,25 @@
   function cancelDelete(){ UI.confirmDelete = null; render(); }
 
   function toggleTrash(moduleKey){
-    UI.trashOpen[moduleKey] = !UI.trashOpen[moduleKey];
+    var opening = !UI.trashOpen[moduleKey];
+    UI.trashOpen[moduleKey] = opening;
+    if(!opening){ render(); return; }
+    // Opening: always fetch this module's actual trashed records fresh
+    // (never trust a stale local copy — see the comment on
+    // applyServerState()) and show a loading state until it arrives.
+    if(STATE.trash) delete STATE.trash[moduleKey];
     render();
+    fetchState(moduleKey).then(function(json){
+      if(!json) return;
+      LAST_POLL_JSON = JSON.stringify(json);
+      applyServerState(json.state);
+      if(json.user) CURRENT_USER = json.user;
+      if(Array.isArray(json.contacts)) CONTACTS = json.contacts;
+    }).catch(function(){
+      toast(T("回收站加载失败，请重试"));
+    }).then(function(){
+      render();
+    });
   }
 
   function restoreRecord(moduleKey, id){
@@ -2553,6 +2655,7 @@
       var rec = STATE.trash[moduleKey].splice(idx,1)[0];
       delete rec.deleted; delete rec.deletedAt; delete rec.deletedBy;
       STATE[moduleKey].push(rec);
+      if(STATE.trashCounts) STATE.trashCounts[moduleKey] = Math.max(0, (STATE.trashCounts[moduleKey]||0) - 1);
     }
     render();
     saveOp({op:"restore", module:moduleKey, id:id}, before);
@@ -2611,6 +2714,7 @@
     var before = deepClone(STATE);
     if(isPurge){
       STATE.trash[moduleKey] = (STATE.trash[moduleKey]||[]).filter(function(r){ return r.id !== id; });
+      if(STATE.trashCounts) STATE.trashCounts[moduleKey] = Math.max(0, (STATE.trashCounts[moduleKey]||0) - 1);
     } else {
       // Soft delete: moves off the live list immediately (same instant
       // feedback as before) — the server keeps it, so it reappears in the
@@ -2618,6 +2722,7 @@
       var rec = STATE[moduleKey].find(function(r){ return r.id === id; });
       STATE[moduleKey] = STATE[moduleKey].filter(function(r){ return r.id !== id; });
       if(rec) STATE.trash[moduleKey] = (STATE.trash[moduleKey]||[]).concat([rec]);
+      if(STATE.trashCounts) STATE.trashCounts[moduleKey] = (STATE.trashCounts[moduleKey]||0) + 1;
     }
     UI.confirmDelete = null;
     render();
@@ -2628,12 +2733,19 @@
   /* ---------- persistence ---------- */
 
   function applyServerState(state){
+    // STATE.trash is a partial, on-demand cache: the server only sends a
+    // module's actual trashed records when its recycle-bin panel is open
+    // (see toggleTrash()), so this wholesale-replaces it with whatever the
+    // server just sent — usually nothing, sometimes one module's worth.
+    // The badge counts (STATE.trashCounts) are cheap and come back on
+    // every fetch, so those stay fully populated regardless.
     STATE = state;
     if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0,VEH:0};
+    if(!STATE.trashCounts) STATE.trashCounts = {};
     if(!STATE.trash) STATE.trash = {};
     ["meetings","sops","staff","damages","trackers","repairs","vehicles","inspections","complaints","calibrations","traces"].forEach(function(k){
       if(!STATE[k]) STATE[k] = [];
-      if(!STATE.trash[k]) STATE.trash[k] = [];
+      if(STATE.trashCounts[k] == null) STATE.trashCounts[k] = 0;
     });
   }
 
@@ -2670,8 +2782,13 @@
     });
   }
 
-  function fetchState(){
-    return fetch("/api/state").then(function(res){
+  // trashModule (optional): ask the server to also include that one
+  // module's actual trashed records (see api/state.js's trashForModule()).
+  // Without it, the response only carries the cheap trashCounts badge
+  // numbers — see the comment on applyServerState() for why.
+  function fetchState(trashModule){
+    var url = "/api/state" + (trashModule ? ("?trashModule=" + encodeURIComponent(trashModule)) : "");
+    return fetch(url).then(function(res){
       if(res.status === 401){ return null; }
       if(!res.ok){ throw new Error("load_failed"); }
       return res.json();
@@ -2718,11 +2835,29 @@
     return false;
   }
 
+  // Set after every poll/save that actually applies a state, so the next
+  // poll can tell "nothing changed" apart from "something changed" without
+  // guessing. render() rebuilds the whole #app-root innerHTML from scratch
+  // (see render()'s own comment) — fine when something really did change,
+  // but a no-op rebuild every 20 seconds has real cost on a busy module and
+  // silently undoes anything transient that isn't tracked in UI state, like
+  // an expanded "修改历史" <details> panel snapping back closed for no
+  // reason the person watching it can see.
+  var LAST_POLL_JSON = null;
+
   function pollState(){
     if(document.hidden) return; // tab is in the background — no point spending a request nobody will see
     if(isEditingSomething()) return; // don't disrupt someone mid-edit
-    fetchState().then(function(json){
+    // If a recycle-bin panel happens to be open, ask for that module's
+    // trash too so it keeps updating live (e.g. a teammate restores
+    // something while this person is looking at the same panel) — every
+    // other module's trash stays out of the routine poll payload.
+    var openTrashModule = UI && UI.trashOpen ? Object.keys(UI.trashOpen).find(function(k){ return UI.trashOpen[k]; }) : null;
+    fetchState(openTrashModule).then(function(json){
       if(!json) return;
+      var raw = JSON.stringify(json);
+      if(raw === LAST_POLL_JSON) return; // identical to what's already on screen — skip the rebuild
+      LAST_POLL_JSON = raw;
       applyServerState(json.state);
       if(json.user) CURRENT_USER = json.user;
       if(Array.isArray(json.contacts)) CONTACTS = json.contacts;
@@ -2851,6 +2986,7 @@
         showLogin();
         return;
       }
+      LAST_POLL_JSON = JSON.stringify(json);
       applyServerState(json.state);
       if(json.user) CURRENT_USER = json.user;
       if(Array.isArray(json.contacts)) CONTACTS = json.contacts;

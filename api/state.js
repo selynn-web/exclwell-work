@@ -64,25 +64,41 @@ function badRequest(status, body) {
 
 // Deleting a record no longer removes it from storage — it's flagged
 // deleted:true/deletedAt/deletedBy and stays in the same array (see the
-// "delete" op below). This function is what turns that one array into the
-// two views the client actually gets: the normal live list (everywhere
-// unchanged code already expects) and a separate `trash` map for the
-// recycle-bin UI. Module permission (canAccess) gates both views the same
-// way it already gated the live list, so a restricted account can't see
-// deleted records from a module it can't access either.
+// "delete" op below). This function turns that one array into the live
+// list view the client already expects everywhere, plus a per-module
+// trashCounts map for the "🗑 回收站 (N)" badge. It does NOT include the
+// full trash arrays — those carry every deleted record's full data
+// (photos included), and shipping them on every poll/page load regardless
+// of whether anyone's looking at a recycle bin is wasted bandwidth that
+// only grows as trash accumulates over time. Use trashForModule() below to
+// fetch one module's actual trashed records on demand (recycle bin opened,
+// or right after an op that touched that module). Module permission
+// (canAccess) gates both the live list and the counts the same way it
+// already gated the live list, so a restricted account can't see deleted
+// records from a module it can't access either.
 function shapeForClient(state, me) {
-  var out = { counters: state.counters, trash: {} };
+  var out = { counters: state.counters, trashCounts: {} };
   VALID_MODULES.forEach(function (k) {
     if (!auth.canAccess(me, k)) {
       out[k] = [];
-      out.trash[k] = [];
+      out.trashCounts[k] = 0;
       return;
     }
     var arr = Array.isArray(state[k]) ? state[k] : [];
     out[k] = arr.filter(function (r) { return !r.deleted; });
-    out.trash[k] = arr.filter(function (r) { return r.deleted; });
+    out.trashCounts[k] = arr.reduce(function (n, r) { return r.deleted ? n + 1 : n; }, 0);
   });
   return out;
+}
+
+// One module's actual trashed records — only computed when asked for
+// (recycle bin opened for that module, or as a courtesy right after an op
+// that touched it), not bundled into every routine state fetch. Same
+// permission gate as shapeForClient().
+function trashForModule(state, me, moduleKey) {
+  if (VALID_MODULES.indexOf(moduleKey) === -1 || !auth.canAccess(me, moduleKey)) return [];
+  var arr = Array.isArray(state[moduleKey]) ? state[moduleKey] : [];
+  return arr.filter(function (r) { return r.deleted; });
 }
 
 module.exports = async function handler(req, res) {
@@ -95,9 +111,21 @@ module.exports = async function handler(req, res) {
   try {
     if (req.method === "GET") {
       // shapeForClient() also enforces module permissions on both the live
-      // list and the trash view — not just hidden in the UI, a restricted
+      // list and the trash counts — not just hidden in the UI, a restricted
       // account can't read that data by calling the API directly either.
-      var current = shapeForClient(normalize(await db.kvGet(STATE_KEY)), me);
+      var rawState = normalize(await db.kvGet(STATE_KEY));
+      var current = shapeForClient(rawState, me);
+      // The recycle-bin UI asks for one module's actual trashed records by
+      // adding ?trashModule=xxx — either because that module's panel is
+      // open (see toggleTrash() in app.js) or because a currently-open
+      // panel is being kept fresh alongside the normal poll. Anything else
+      // (invalid module, or no permission) is just ignored rather than
+      // erroring, since this is a courtesy addition to a normal state read.
+      var trashModuleParam = req.query && req.query.trashModule;
+      if (typeof trashModuleParam === "string" && auth.canAccess(me, trashModuleParam) && VALID_MODULES.indexOf(trashModuleParam) > -1) {
+        current.trash = {};
+        current.trash[trashModuleParam] = trashForModule(rawState, me, trashModuleParam);
+      }
       // A lightweight name+phone directory, available to every logged-in
       // teammate regardless of module permissions (unlike the full account
       // list behind 账号管理/"accounts"). Used so anyone working a tracker
@@ -210,7 +238,15 @@ module.exports = async function handler(req, res) {
         return { value: state };
       });
 
-      res.status(200).json({ state: shapeForClient(result.value, me), user: me });
+      // Bundle fresh trash for the module this op just touched (delete
+      // populates it, restore/purge/upsert change what's in it) so a
+      // currently-open recycle-bin panel for that module updates from this
+      // same response — no separate round trip needed for the common case
+      // of acting on a module whose trash panel you're already looking at.
+      var shaped = shapeForClient(result.value, me);
+      shaped.trash = {};
+      shaped.trash[body.module] = trashForModule(result.value, me, body.module);
+      res.status(200).json({ state: shaped, user: me });
       return;
     }
 
