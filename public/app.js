@@ -873,7 +873,7 @@
   var NAV_GROUPS = [
     { label:null, keys:["overview","meetings"] },
     { label:"品管部", keys:["sops","inspections","damages"] },
-    { label:"维修部", keys:["calibrations","repairs"] },
+    { label:"维修部", keys:["equipment","calibrations","repairs"] },
     { label:null, keys:["complaints","traces","vehicles","trackers","leaves","accounts"] }
   ];
   var NAV_ORDER = NAV_GROUPS.reduce(function(acc, g){ return acc.concat(g.keys); }, []);
@@ -884,7 +884,14 @@
       cta:"打开请假申请系统 ↗" }
   };
   var INTERNAL_VIEWS = {
-    accounts: { label:"账号管理" }
+    accounts: { label:"账号管理" },
+    // A read-only lens over 设备维修记录 + 设备校准记录, grouped by
+    // equipment name (same normalizeEquip() matching the QR panel uses) —
+    // not a data module of its own, so it's deliberately NOT in
+    // RESTRICTABLE_MODULES: see the "equipment" special-case in
+    // isModuleAllowed() below, which derives its visibility from those two
+    // modules' own permissions instead of needing a separate checkbox.
+    equipment: { label:"设备总览" }
   };
   // Modules an account can be restricted to a subset of — mirrors
   // api/_auth.js's RESTRICTABLE_MODULES. "overview" and "leaves" are
@@ -900,6 +907,11 @@
     return key;
   }
   function isModuleAllowed(key){
+    // 设备总览 shows only data the account could already see individually
+    // on 设备维修记录 / 设备校准记录 — it's a derived view, not a separate
+    // permission, so its visibility just follows whichever of those two the
+    // account can already access (either one is enough).
+    if(key === "equipment") return isModuleAllowed("repairs") || isModuleAllowed("calibrations");
     // "overview" and "leaves" are never restrictable (see RESTRICTABLE_MODULES
     // above) — they're never offered as checkboxes, so they'd never appear in
     // an account's allowedModules array. Without this check they'd wrongly
@@ -944,7 +956,7 @@
     var now = new Date();
     return {
       view:"overview",
-      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:"",repairs:"",vehicles:""},
+      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:"",repairs:"",vehicles:"",equipment:""},
       modal:null, confirmDelete:null, equipmentPanel:null,
       repairsViewMode:"list",
       calendarCursor:{y:now.getFullYear(), m:now.getMonth()},
@@ -2415,8 +2427,89 @@
       {key:"leaves", label:T3("请假申请","Leave Requests","Permohonan Cuti"), link: LEAVE_APP_URL, sub:T3("前往 exclwell 系统","Go to exclwell system","Pergi ke sistem exclwell")}
     ].filter(function(c){ return isModuleAllowed(c.key); });
     return '<div class="view-header"><h2 class="view-title">'+esc(T("总览"))+'</h2></div>'
+      + renderActionItems()
       + '<div class="stat-grid">' + cards.map(renderStatCard).join("") + '</div>'
       + renderDashboardCharts();
+  }
+
+  // Cross-module "what needs my attention today" list — the per-module
+  // 即将到期/已延误 badges already exist, but seeing them means clicking
+  // into each module one at a time. This pulls the same three checks
+  // (追踪记录 overdue/due-soon, 设备校准 due-soon window, 汽车管理
+  // road-tax/insurance window) into one scannable, click-to-open list at
+  // the top of 总览 — the same three sources the daily email digest
+  // covers (see api/cron/reminders.js), just surfaced in the app itself
+  // for whoever opens it between one day's email and the next.
+  function overviewActionItems(){
+    var items = [];
+    if(isModuleAllowed("trackers")){
+      (STATE.trackers||[]).forEach(function(r){
+        var info = trackerReminderInfo(r);
+        if(!info) return;
+        var sub = info.overdue
+          ? (info.days != null ? T3("已延误 "+info.days+" 天","Overdue by "+info.days+" day"+(info.days===1?"":"s"),"Tertunggak "+info.days+" hari") : T("已延误"))
+          : (info.days === 0 ? T3("今天到期","Due today","Tamat tempoh hari ini") : T3(info.days+" 天后到期","Due in "+info.days+" day"+(info.days===1?"":"s"),"Tamat tempoh dalam "+info.days+" hari"));
+        items.push({ module:"trackers", id:r.id, moduleLabel:T("追踪记录"), title:r.issue||r.id,
+          severity: info.overdue ? "seal" : "warn", sub:sub,
+          sortKey: info.overdue ? -1000-(info.days||0) : (info.days||0) });
+      });
+    }
+    if(isModuleAllowed("calibrations")){
+      (STATE.calibrations||[]).forEach(function(r){
+        var days = daysUntil(r.nextDueDate);
+        if(days == null || days > 14) return;
+        var sub = days < 0
+          ? T3("已逾期 "+Math.abs(days)+" 天","Overdue by "+Math.abs(days)+" day"+(Math.abs(days)===1?"":"s"),"Tertunggak "+Math.abs(days)+" hari")
+          : (days === 0 ? T3("今天到期","Due today","Tamat tempoh hari ini") : T3(days+" 天后到期","Due in "+days+" day"+(days===1?"":"s"),"Tamat tempoh dalam "+days+" hari"));
+        items.push({ module:"calibrations", id:r.id, moduleLabel:T("设备校准"), title:r.equipment||r.id,
+          severity: days < 0 ? "seal" : "warn", sub:sub,
+          sortKey: days < 0 ? -1000-Math.abs(days) : days });
+      });
+    }
+    if(isModuleAllowed("vehicles")){
+      (STATE.vehicles||[]).forEach(function(r){
+        if(r.status === "已停用") return;
+        var rt = daysUntil(r.roadTaxExpiry), ins = daysUntil(r.insuranceExpiry);
+        var bits = [], minDays = null;
+        [["路税","road tax","cukai jalan",rt],["保险","insurance","insurans",ins]].forEach(function(x){
+          var d = x[3];
+          if(d == null || d > 30) return;
+          bits.push(T3(x[0], x[1], x[2]) + (d < 0
+            ? T3(" 已逾期 "+Math.abs(d)+" 天"," overdue "+Math.abs(d)+"d"," tertunggak "+Math.abs(d)+" hari")
+            : T3(" "+d+" 天后到期"," due in "+d+"d"," "+d+" hari lagi")));
+          minDays = minDays === null ? d : Math.min(minDays, d);
+        });
+        if(!bits.length) return;
+        items.push({ module:"vehicles", id:r.id, moduleLabel:T("汽车管理"), title:r.plateNo||r.id,
+          severity: minDays < 0 ? "seal" : "warn", sub: bits.join(" · "),
+          sortKey: minDays < 0 ? -1000-Math.abs(minDays) : minDays });
+      });
+    }
+    items.sort(function(a,b){ return a.sortKey - b.sortKey; });
+    return items;
+  }
+
+  var ACTION_ITEMS_VISIBLE_LIMIT = 12;
+  function renderActionItems(){
+    var items = overviewActionItems();
+    if(!items.length) return "";
+    var visible = items.slice(0, ACTION_ITEMS_VISIBLE_LIMIT);
+    var rows = visible.map(function(it){
+      return '<li><button type="button" class="action-item" onclick="app.jumpToActionItem(\''+it.module+'\',\''+it.id+'\')">'
+        + '<span class="action-item-severity action-item-severity-'+it.severity+'"></span>'
+        + '<span class="action-item-body"><span class="action-item-title">'+esc(it.title)+'</span><span class="action-item-sub">'+esc(it.sub)+'</span></span>'
+        + '<span class="action-item-module">'+esc(it.moduleLabel)+'</span>'
+        + '</button></li>';
+    }).join("");
+    var extra = items.length - visible.length;
+    var moreNote = extra > 0 ? '<p class="comments-empty">'+esc(T3("还有 "+extra+" 项，打开对应模块查看全部。","+"+extra+" more — open the module to see the rest.","+"+extra+" lagi — buka modul berkaitan untuk lihat semua."))+'</p>' : "";
+    return '<div class="panel action-items"><h3 class="panel-title">'+esc(T3("需要关注 ("+items.length+")","Needs attention ("+items.length+")","Perlu perhatian ("+items.length+")"))+'</h3>'
+      + '<ul class="action-items-list">'+rows+'</ul>' + moreNote + '</div>';
+  }
+
+  function jumpToActionItem(moduleKey, id){
+    UI.view = moduleKey;
+    openModal(moduleKey, id);
   }
 
   function renderExternalEntry(key){
@@ -2521,7 +2614,60 @@
       + '</form>'
       + '</div>'
       + renderEmailReminderPanel()
+      + renderBackupPanel()
       + rows;
+  }
+
+  // A one-click "download everything I can see, right now" safety net —
+  // separate from exportModule()/exportRecord() above, which produce
+  // reader-friendly Word documents for one module or one record at a time.
+  // This is the opposite tradeoff: one file, every accessible module,
+  // structured (JSON) rather than pretty, meant to sit in the user's own
+  // downloads folder as an offline copy she can open without any tool
+  // beyond a text editor — not a replacement for Supabase's own backups,
+  // just a second copy she personally holds. Only ever includes what
+  // STATE already carries in this browser tab, so — same as the global
+  // search and every module view — it can never include a module this
+  // account doesn't have permission for (the server already omitted that
+  // data from STATE, see shapeForClient() in api/state.js), and it does
+  // NOT include the recycle bin (STATE.trash is only ever a partial,
+  // on-demand cache — see applyServerState's comment — so it's not a
+  // complete/meaningful thing to back up here).
+  function renderBackupPanel(){
+    return '<div class="panel" style="margin-bottom:18px;">'
+      + '<h3 class="panel-title">'+esc(T3("数据备份","Data backup","Sandaran data"))+'</h3>'
+      + '<p class="external-desc">'+esc(T3(
+          "把你目前账号能看到的全部记录导出成一个文件，下载到自己电脑上留一份备份。不包含回收站里已删除的记录（如果需要，请先在各模块的回收站里恢复）。",
+          "Export every record your account can currently see into one file you download and keep as your own backup. The recycle bin isn't included (restore anything you need first).",
+          "Eksport semua rekod yang akaun anda boleh lihat sekarang ke dalam satu fail untuk disimpan sebagai sandaran anda sendiri. Tong sampah tidak disertakan (pulihkan dahulu jika perlu)."
+        ))+'</p>'
+      + '<button type="button" class="btn btn-ghost" onclick="app.exportFullBackup()">'+esc(T3("下载全部数据备份","Download full data backup","Muat turun sandaran data penuh"))+'</button>'
+      + '</div>';
+  }
+
+  function exportFullBackup(){
+    var modules = ["meetings","sops","staff","damages","trackers","repairs","vehicles","inspections","complaints","calibrations","traces"];
+    var payload = {
+      exportedAt: new Date().toISOString(),
+      exportedBy: (CURRENT_USER && CURRENT_USER.name) || "",
+      note: "团队档案台数据备份 — 不含回收站中已删除的记录",
+      counters: STATE.counters
+    };
+    modules.forEach(function(k){ payload[k] = STATE[k] || []; });
+    var blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    // safeFilename() — see its own comment above (used by the Word export
+    // below) — a non-ASCII <a download> name silently becomes a generic
+    // "download" with no extension in some Chromium builds. Keeping the
+    // on-disk name plain ASCII avoids that; the data inside is untouched.
+    a.download = safeFilename("team-archive-backup_" + new Date().toISOString().slice(0,10)) + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    toast(T3("备份文件已开始下载","Backup download started","Muat turun sandaran bermula"));
   }
 
   // Admin-only panel for the automatic daily email digest (追踪记录 /
@@ -2705,6 +2851,7 @@
     var root = document.getElementById("app-root");
     var body = UI.view === "overview" ? renderOverview()
       : UI.view === "accounts" ? renderAccountsView()
+      : UI.view === "equipment" ? renderEquipmentOverview()
       : EXTERNAL_VIEWS[UI.view] ? renderExternalEntry(UI.view)
       : renderModuleView(UI.view);
     root.innerHTML = '<div class="app-shell">'
@@ -2884,6 +3031,100 @@
       + '</div></div></div>'
       + sectionsHtml
       + '</div></div>';
+  }
+
+  // Groups 设备维修记录 + 设备校准记录 by equipment name (same
+  // normalizeEquip() matching used by the QR panel above) into one row per
+  // physical asset — "how many pieces of equipment do we have and which
+  // ones need attention" isn't answerable from either module's own list on
+  // its own. Read-only: this never creates data, it's purely a different
+  // lens on records that already exist. Respects each module's own
+  // permission — a record from a module this account can't see was already
+  // excluded from STATE by the server, so it never reaches this grouping.
+  function equipmentRegistry(){
+    var map = {};
+    function bucket(name){
+      var key = normalizeEquip(name);
+      if(!key) return null;
+      if(!map[key]) map[key] = { name:name, repairs:[], calibrations:[] };
+      return map[key];
+    }
+    if(isModuleAllowed("repairs")){
+      (STATE.repairs||[]).forEach(function(r){
+        if(!r.equipment) return;
+        var entry = bucket(r.equipment);
+        if(entry) entry.repairs.push(r);
+      });
+    }
+    if(isModuleAllowed("calibrations")){
+      (STATE.calibrations||[]).forEach(function(r){
+        if(!r.equipment) return;
+        var entry = bucket(r.equipment);
+        if(entry) entry.calibrations.push(r);
+      });
+    }
+    var list = Object.keys(map).map(function(k){ return map[k]; });
+    list.forEach(function(entry){
+      var allDates = entry.repairs.map(function(r){ return r.date; })
+        .concat(entry.calibrations.map(function(r){ return r.date; }))
+        .filter(Boolean);
+      entry.lastServiced = allDates.length ? allDates.slice().sort().slice(-1)[0] : null;
+      var dueDates = entry.calibrations.map(function(r){ return r.nextDueDate; }).filter(Boolean);
+      entry.nextDue = dueDates.length ? dueDates.slice().sort()[0] : null;
+      entry.openRepairs = entry.repairs.filter(function(r){ return r.status !== "已完成"; }).length;
+      entry.totalRecords = entry.repairs.length + entry.calibrations.length;
+    });
+    list.sort(function(a,b){
+      var ad = a.nextDue ? daysUntil(a.nextDue) : Infinity;
+      var bd = b.nextDue ? daysUntil(b.nextDue) : Infinity;
+      if(ad !== bd) return ad - bd;
+      return String(a.name).localeCompare(String(b.name), "zh");
+    });
+    return list;
+  }
+
+  function equipmentCard(entry){
+    var days = entry.nextDue ? daysUntil(entry.nextDue) : null;
+    var colorKey = "neutral", dueChip = "";
+    if(days != null){
+      if(days < 0){
+        var abs = Math.abs(days);
+        colorKey = "seal";
+        dueChip = T3("校准已逾期 "+abs+" 天","Calibration overdue "+abs+"d","Kalibrasi tertunggak "+abs+" hari");
+      } else if(days <= 14){
+        colorKey = "warn";
+        dueChip = T3(days+" 天后到期校准","Calibration due in "+days+"d","Kalibrasi tamat "+days+" hari lagi");
+      } else {
+        colorKey = "good";
+        dueChip = T3("校准正常","Calibration OK","Kalibrasi OK");
+      }
+    }
+    var chips = (dueChip ? '<span class="chip chip-'+colorKey+'">'+esc(dueChip)+'</span>' : '')
+      + (entry.openRepairs ? '<span class="chip chip-warn">'+esc(T3(entry.openRepairs+" 项维修待处理", entry.openRepairs+" repair"+(entry.openRepairs===1?"":"s")+" pending", entry.openRepairs+" pembaikan tertunggak"))+'</span>' : '');
+    var recordsText = T3(entry.totalRecords+" 条记录", entry.totalRecords+" records", entry.totalRecords+" rekod");
+    return '<div class="card equipment-card" style="--card-color:var(--'+colorKey+')" onclick="app.openEquipmentPanel('+jsAttr(entry.name)+')">'
+      + '<div class="card-top"><span class="card-id num">'+esc(recordsText)+'</span><div class="card-top-chips">'+chips+'</div></div>'
+      + '<h3 class="card-title">'+esc(entry.name)+'</h3>'
+      + '<div class="card-meta">'
+      + '<p>'+esc(entry.lastServiced ? (T("最近记录：")+entry.lastServiced) : T("暂无维修/校准记录"))+'</p>'
+      + (entry.nextDue ? '<p>'+esc(T("下次到期：")+entry.nextDue)+'</p>' : '')
+      + '</div></div>';
+  }
+
+  function renderEquipmentOverview(){
+    var all = equipmentRegistry();
+    var q = (UI.search.equipment||"").trim().toLowerCase();
+    var list = q ? all.filter(function(entry){ return String(entry.name).toLowerCase().indexOf(q) > -1; }) : all;
+    var searchPlaceholder = T3("搜索设备名称…","Search equipment…","Cari peralatan…");
+    var header = '<div class="view-header">'
+      + '<h2 class="view-title">'+esc(T("设备总览"))+' <span class="view-count num">'+all.length+'</span></h2>'
+      + '<div class="view-tools">'
+      + '<input class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search.equipment||"")+'" oninput="app.setSearch(\'equipment\', this.value)">'
+      + '</div></div>';
+    var body = list.length
+      ? '<div class="card-grid">' + list.map(equipmentCard).join("") + '</div>'
+      : '<div class="empty-state">'+esc(T3("暂无设备记录——设备维修记录或设备校准记录里填写了「设备名称」的记录会自动汇总在这里。","No equipment yet — records with an equipment name on 设备维修记录 or 设备校准记录 will show up here automatically.","Belum ada peralatan — rekod dengan nama peralatan pada 设备维修记录 atau 设备校准记录 akan muncul di sini secara automatik."))+'</div>';
+    return header + body;
   }
 
   function requestDelete(moduleKey, id){ UI.confirmDelete = {module:moduleKey, id:id}; render(); }
@@ -3321,6 +3562,7 @@
     submitLogin: submitLogin, submitJoin: submitJoin, toggleLoginMode: toggleLoginMode, logout: logout,
     createTrackerFromFlag: createTrackerFromFlag, createTrackerFromRepair: createTrackerFromRepair,
     openEquipmentPanel: openEquipmentPanel, closeEquipmentPanel: closeEquipmentPanel,
+    jumpToActionItem: jumpToActionItem, exportFullBackup: exportFullBackup,
     addReportItem: addReportItem, removeReportItem: removeReportItem, syncReportItems: syncReportItems,
     addTeammate: addTeammate, removeTeammate: removeTeammate,
     togglePermEdit: togglePermEdit, savePermissions: savePermissions,
