@@ -22,6 +22,13 @@ const MODULE_PREFIX = {
   complaints: "CPL",
   calibrations: "CAL",
   traces: "TRC",
+  // 设备保养清单 (preventive-maintenance checklist) — one record per
+  // equipment/frequency/location combination, seeded in bulk from a
+  // scanned checklist via the "bulkImport" op below. Deliberately separate
+  // from "calibrations" (校准记录), which stays single-event records with
+  // its own daily reminder wiring — see public/app.js's MODULES.maintenance
+  // for why the two were kept apart.
+  maintenance: "PM",
 };
 const VALID_MODULES = Object.keys(MODULE_PREFIX);
 
@@ -248,6 +255,31 @@ module.exports = async function handler(req, res) {
           if (dcIdx === -1) throw badRequest(404, { error: "not_found" });
           var keptComments = (Array.isArray(arr[dcIdx].comments) ? arr[dcIdx].comments : []).filter(function (c) { return c.id !== body.commentId; });
           arr[dcIdx] = Object.assign({}, arr[dcIdx], { comments: keptComments });
+        } else if (body.op === "bulkImport") {
+          // Create many records in one shot — used by the 设备保养清单
+          // "导入参考清单" button to seed ~100 records from a scanned
+          // checklist without ~100 separate round trips. Same audit
+          // stamping and id-counter logic as a plain "upsert" create, just
+          // looped inside this one kvUpdate call so it's a single
+          // read-modify-write instead of many (less chatty, and no chance
+          // of a partial import if the network drops mid-loop).
+          if (!Array.isArray(body.records) || !body.records.length) throw badRequest(400, { error: "bad_records" });
+          if (body.records.length > 500) throw badRequest(400, { error: "too_many_records", message: "一次最多导入 500 条记录" });
+          var bulkPrefix = MODULE_PREFIX[moduleKey];
+          body.records.forEach(function (rec) {
+            if (!rec || typeof rec !== "object") return;
+            var bulkIncoming = Object.assign({}, rec);
+            delete bulkIncoming.id;
+            delete bulkIncoming.createdBy;
+            delete bulkIncoming.createdAt;
+            delete bulkIncoming.updatedBy;
+            delete bulkIncoming.updatedAt;
+            delete bulkIncoming.history;
+            state.counters[bulkPrefix] = (state.counters[bulkPrefix] || 0) + 1;
+            var bulkId = bulkPrefix + "-" + String(state.counters[bulkPrefix]).padStart(4, "0");
+            var bulkHistory = pushHistory(null, { at: now, by: me.name, action: "create", note: "bulk_import" });
+            arr.push(Object.assign({}, bulkIncoming, { id: bulkId, createdBy: me.name, createdAt: now, updatedBy: me.name, updatedAt: now, history: bulkHistory }));
+          });
         } else if (body.op === "purge") {
           // Permanent delete — only allowed on a record that's ALREADY in
           // the recycle bin (deleted:true). This two-step requirement

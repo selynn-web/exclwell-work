@@ -76,7 +76,7 @@ function lockMessage(lockedUntil) {
 // external link; overview is filtered down to whatever the user can see).
 var RESTRICTABLE_MODULES = [
   "meetings", "sops", "inspections", "complaints", "calibrations", "repairs", "traces",
-  "vehicles", "damages", "trackers", "accounts"
+  "vehicles", "damages", "trackers", "accounts", "maintenance"
 ];
 
 // A user's `allowedModules` is either null/undefined (full access, the

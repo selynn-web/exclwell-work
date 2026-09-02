@@ -452,6 +452,145 @@
 
   var DEPARTMENTS = ["大豆部门","面筋部门","包装部门","QC部门","维修部门","HACCP部门","出货部门","人事部门","采购部门","其他部门"];
 
+  // 设备保养清单 — seed data for the "导入参考清单" button on the
+  // maintenance module (see MODULES.maintenance below and renderMaintenanceView()).
+  // Transcribed from the scanned Preventive Maintenance Checklist the user
+  // uploaded (year 2024/2025), organized by frequency tier then location —
+  // the same grouping already delivered to them as 设备保养检查表整理清单.docx.
+  // Every record is created with status:"未核对" (unverified) so the
+  // transcription risk flagged in that document (hand-read from a rotated,
+  // dense scan) stays visible per-record until someone checks it off — see
+  // MODULES.maintenance.statusColors.
+  var MAINTENANCE_SEED = (function(){
+    function grp(frequency, location, tasks, equipRows, notesByCode){
+      var taskText = tasks.join("\n");
+      return equipRows.map(function(row){
+        var rec = { equipCode:row[0], nameCn:row[1], nameEn:row[2], frequency:frequency, location:location, tasks:taskText, status:"未核对" };
+        if(notesByCode && notesByCode[row[0]]) rec.notes = notesByCode[row[0]];
+        return rec;
+      });
+    }
+    var out = [];
+
+    // ---------- 每周 Weekly ----------
+    out = out.concat(grp("每周", "地点 1：备料区 Preparation",
+      ["Inspect motor and bearing. 检查马达和轴承。","Inspect belt and chains. 检查皮带和链条。","Check screw and electrical wire. 检查螺丝、电线。"],
+      [
+        ["A1","乳化机","Emulsifying Cutter Machine"], ["A2","液体搅拌机","Liquid Mixer"], ["A3","搅拌机","Blender Machine"],
+        ["A4","大搅拌机","Blender Machine"], ["A5","小搅拌机","Mixer Machine"], ["A6","大搅拌机（自动式）","Automatic Vacuum Mixing Machine"],
+        ["A7","脱水机／水力压取机","Hydroextractor"], ["A11","混合搅拌机","Mixture Machine"], ["A15","小搅拌机","Blender Machine"],
+        ["A17","水分计／碗形搅拌机","Bowl Filling Machine"], ["A18","蒸煮锅","Boiling Machine"], ["A19","切丁机","Cutter Machine"]
+      ],
+      {
+        "A18": "附加检查项：Inspect bushing, spiral blade；Cleaning hopper and mold and check hopper and mold copper tooth. 检查衬套、螺旋刀片；清洗料斗和模具并检查铜齿。",
+        "A7": "附加检查项：Inspect pedestal, stopper, bearing housing, v-belt, drive, clutch and basket. 检查底座、挡片、轴承箱、三角带、驱动器、离合器和篮子。"
+      }
+    ));
+    out = out.concat(grp("每周", "地点 2：热厨房 Hot Kitchen",
+      ["Check motor, screw, electrical wire. 检查马达、螺丝、电线。","Inspect motor and steam coils. 检查电机和蒸汽盘管。","Inspect door seals. 检查门条。",
+       "Inspect roller of conveyor belt and belt chain. 检查滚轮传送带和皮带链条。","Inspect natural smoke check air/water atomization. 检查自然烟雾检查空气／水雾化情况。"],
+      [
+        ["E1","煮沸锅","Boiling Machine"], ["E1A","蒸煮机","Steaming Cooking Machine"], ["E2","蒸煮机","Steaming Cooking Machine"],
+        ["E3","蒸煮机","Steaming Cooking Machine"], ["E4","填充机","G-ring Filling Machine"], ["E8","填充机","G-ring Filling Machine"],
+        ["E9","G丁模型机","G-ring Filling Machine"], ["E10","深煎模型机","Role Forming Machine"], ["E11","蒸煮锅","Boiling Pot"],
+        ["E12","蒸煮锅","Boiling Pot"], ["E13","蒸煮锅","Boiling Pot"], ["E14","蒸煮锅","Boiling Pot"], ["E15","蒸煮锅","Boiling Pot"],
+        ["E18","油炸锅","Continuous Fryer Machine"], ["E30","鱼丸机","Filling Machine"], ["E31","平底锅","Flat Steaming Cooking Machine"],
+        ["E33","蒸煮锅","Boiling Pot"], ["E34","隧道式蒸箱","Tunnel-type Steaming Box"], ["E35","蒸箱","Steaming Box"],
+        ["E36","输送带","Conveying"], ["E37","蒸煮机","Steaming Cooking Machine"], ["E39","蒸煮机","Steaming Cooking Machine"],
+        ["E40","塑料输送带","Plastic Sealing Machine"]
+      ]
+    ));
+    out = out.concat(grp("每周", "地点 3：包装区 Packing",
+      ["Check screw, motor and cleaning service. 检查螺丝、电机和清洁服务。","Check electrical wire and air hose. 检查电线和气管。","Lubricate moving parts. 润滑移动部件。"],
+      [
+        ["C13","封口机","Canned Sealing Machine"], ["C14","真空封口机","Canned Sealing Machine"], ["F3","切片机","Slicer Machine"],
+        ["F6","切片机","Slicer Machine"], ["F7","切片机","Cutter Machine"], ["F8","滚筒式包装机","Roll Sealing Machine"],
+        ["F9","交链切割机","Food Cutter Machine"], ["F10","交链切割机","Food Cutter Machine"], ["F15","撕碎切割机","Shredded Machine"],
+        ["F16","切割机","Cutter Machine"], ["F17","自动包装机","Auto Packing Machine"], ["F18","切肉机","Meat Slicer Machine"],
+        ["F19","装填机","Paste Filling Machine"], ["F20","装填机","Food Cutter Machine"], ["F23","切片机（H.K.）","Slicing Machine (H.K.)"],
+        ["F24","切片机","Slicing Machine"]
+      ]
+    ));
+    out = out.concat(grp("每周", "地点 4：成品区 Finished Goods",
+      ["Inspect electrical component and cleaning. 检查电气元件和清洁。","Do a lubricant into holes and on sliding parts. 在孔和滑动部件上涂上润滑剂。"],
+      [ ["G6","捆扎带机","Strapping Belt Machine"], ["G8","捆扎带机","Strapping Belt Machine"] ]
+    ));
+
+    // ---------- 每两周 Every 2 Weeks ----------
+    out = out.concat(grp("每两周", "地点 1：黄豆磨浆 Soya Bean Moulding",
+      ["Check electrical wire and check bearing. 检查电线并检查轴承。","Check motor and screw. 检查马达与螺丝。","Check bushing, spiral blade. 检查衬套、螺旋刀片。"],
+      [ ["B1","充填机","Oil Pressure Stuffer Machine"], ["B2","（待核对）","(to verify against original)"], ["B3","平磨机","Flat Machine"], ["B4","真空充填机","Vacuum Filling Machine"] ]
+    ));
+    out = out.concat(grp("每两周", "地点 2：面筋成型 Gluten Moulding",
+      ["Inspect motor and cleaning service. 检查马达与清洁服务。","Check belt and chains. 检查皮带和链条。","Inspect mold and check copper tooth. 检查模具并检查铜齿。",
+       "Check bushing, spiral blade. 检查衬套、螺旋刀片。","Inspect belt and chains. 检查皮带和链条。"],
+      [ ["D4","乳化机","Bowl Cutter Machine"], ["D5","乳化机","Bowl Cutter Machine"], ["D6","乳化机","Bowl Cutter Machine"], ["D7","画糊机","Automatic Gluten Forming Machine"] ]
+    ));
+    out = out.concat(grp("每两周", "地点 3：冷藏室 A Cold Room A",
+      ["Inspect motor and belting. 检查马达与皮带。","Check the connection wire. 检查电线接头。"],
+      [ ["G1","冷气机","Air-Cond (Cold Room)"], ["G4","冷冻冷藏机","Air-Cond (Cold Room)"], ["G5","冷冻冷藏机","Air-Cond (Cold Room)"], ["G7","冷冻冷藏机","Air-Cond (Cold Room)"] ]
+    ));
+    out = out.concat(grp("每两周", "地点 4：素肉生产线 Vege Meat Production Line",
+      ["Inspect motor and bearing. 检查马达与轴承。","Check the brake plate and die. 检查刹车片和模具。","Check the electrical wire is in well condition. 检查电线是否好状态。",
+       "Check motor, check of misalignment of conveyor chain. 检查马达、检查输送链是否好状态。","Check the belt chain. 检查皮带链。"],
+      [
+        ["Soya 1A","大搅拌机 (VG)","High Capacity Mixer Machine"], ["Soya 1B","小搅拌机 (VG)","Mixer Machine"],
+        ["Soya 2A","小搅拌机 (VG)","Extruder"], ["Soya 2B","小膨化机","Puffing Machine"], ["Soya 3","热风式烘干机","Hot Air Drying Machine"]
+      ],
+      { "B3": "第 2-5 项检查是针对 B3（滤面机）这台设备的附加检查项目，不是这个地点全部设备都要做。" }
+    ));
+
+    // ---------- 每月 Monthly ----------
+    out = out.concat(grp("每月", "地点 1：干品成型 Dry Product Moulding",
+      ["Check screw and connection electrical wire. 检查螺丝和连接电线。","Inspect door seals. 检查门封条。","Check gas and steam valve. 检查燃气和蒸汽阀。",
+       "Check the steam oven check steamer rack's screw. 检查蒸箱内烘架的螺丝。"],
+      [
+        ["C1","平底锅","Rotary Frying Pan"], ["C2","平底锅","Rotary Frying Pan"], ["C4","撕碎机","Shredded Machine"], ["C5","炸片机","Slit-Fry Machine"],
+        ["C6","蒸箱","Steam Oven"], ["C7","蒸箱","Steam Oven"], ["C8","蒸箱","Steam Oven"], ["C9","烘箱","Baking Oven"],
+        ["C11","震荡筛","Vibrating Sieving Machine"], ["C17","真空吸尘机","Vacuum Drying Machine"], ["C22","烘箱","Baking Machine"]
+      ]
+    ));
+    out = out.concat(grp("每月", "地点 2：干品包装 Dry Product Packing",
+      ["Inspect motor and screw. 检查马达与螺丝。","Check electrical wire and cleaning service. 检查电线并清洁服务。","Check the transmission bearing and air hose. 检查传动轴承和气管。","Check the conveyor belting. 检查输送带。"],
+      [ ["C12","混合机","Mixing"], ["C16","造粒机","Granulator"], ["C18","成型机","Forming Machine"], ["C21","真空自动包装机","Automatic Vacuum Packing Machine"] ]
+    ));
+    out = out.concat(grp("每月", "地点 3：烟熏房 Smoke Room",
+      ["Inspect door seals. 检查门封条。","Check gas and steam valve. 检查燃气和蒸汽阀。","Cleaning the steam oven check steamer rack's screw. 清洁蒸箱并检查烘架螺丝。"],
+      [ ["C10","烟熏机","Smoking / Baking Steaming Machine"], ["C19","烟熏机","Baking Steaming Machine"], ["C20","烟熏机","Steam Baking Machine"] ]
+    ));
+
+    // ---------- 每两月 Every 2 Months ----------
+    out = out.concat(grp("每两月", "地点 1：备料区 Preparation",
+      ["Refill gas and cleaning service. 补充气体和清洁服务。","Cleaning Air Filter. 清洁空气过滤器。","Lubricate fan bearings and motor, bearings. 润滑风扇轴承和马达、轴承。"],
+      [ ["A13","冷却水系统","Cooling Water System"], ["A16","冷藏室","Chiller"], ["A20","冷冻室","Freezer Room"] ]
+    ));
+    out = out.concat(grp("每两月", "地点 2：热厨房 Hot Kitchen",
+      ["Check / clean fan assembly. 检查／清洁风扇组件。","Lubricate fan bearings and motor, bearings. 润滑风扇轴承和马达、轴承。"],
+      [ ["E16","抽风机","Pump"], ["E17","抽风机","Pump"] ]
+    ));
+    out = out.concat(grp("每两月", "地点 3：冷藏室 B Cold Room B",
+      ["Cleaning of the condenser coil fins and refill gas. 清洁冷凝器翅片并补充气体。","Check the reverse blowing. 检查反吹气。","Ensure refrigerant levels are well-maintained and working. 确保制冷剂液位良好并保持正常工作。"],
+      [ ["H1","冷冻冷藏机","Air-Cond (Cold Room)"], ["H2","冷冻冷藏机","Air-Cond (Cold Room)"], ["H3","冷冻冷藏机","Air-Cond (Cold Room)"], ["H4","冷冻冷藏机","Air-Cond (Cold Room)"] ]
+    ));
+
+    // ---------- 每三月 Every 3 Months ----------
+    // Single combined table in the original scan (page 6): one location
+    // header listing all three areas together, one task list, one
+    // equipment table — see the earlier fix to 设备保养检查表整理清单.docx's
+    // build script, which originally mis-split this into two groups and
+    // invented equipment codes (A9/A26/F1) that don't exist in the scan.
+    out = out.concat(grp("每三月", "地点 1-3：备料区／贴纸房／包装区 Preparation / Sticker Room / Packing",
+      ["Clean evaporator and condenser coils. 清洁蒸发器和冷凝器盘管。","Clean air filter. 清洁空气过滤器。","Refill gas. 补充气体。","Inspect electrical wirings and controls. 检查电气线路和控制装置。"],
+      [
+        ["A8","冷气机","Air-Condition"], ["A69","冷气机","Air-Condition"], ["A10","冷气机","Air-Condition"],
+        ["E26","冷气机","Air-Cond"], ["E27","冷气机","Air-Cond"], ["F11","冷气机","Air-Cond"],
+        ["F12","冷气机","Air-Cond"], ["F21","冷气机","Air-Cond"], ["F22","冷气机","Air-Cond"]
+      ]
+    ));
+
+    return out;
+  })();
+
   var MODULES = {
     meetings:{
       key:"meetings", label:"会议记录", singular:"会议", idPrefix:"MTG", titleField:"title",
@@ -721,6 +860,54 @@
       },
       emptyText:'暂无客户投诉记录，点击"新建投诉记录"登记。'
     },
+    maintenance:{
+      key:"maintenance", label:"设备保养清单", singular:"保养项目", idPrefix:"PM", titleField:"equipCode",
+      badgeField:"frequency",
+      fields:[
+        {name:"equipCode", label:"设备编号", type:"text", required:true},
+        {name:"nameCn", label:"设备名称（中文）", type:"text"},
+        {name:"nameEn", label:"Equipment Name (English)", type:"text"},
+        {name:"frequency", label:"检查频率", type:"select", options:["每周","每两周","每月","每两月","每三月"], def:"每周"},
+        {name:"location", label:"地点", type:"text", required:true},
+        {name:"tasks", label:"检查项目（每行一项）", type:"textarea", full:true},
+        {name:"notes", label:"备注 / 附加检查项", type:"textarea", full:true},
+        {name:"lastServiced", label:"上次保养日期", type:"date"},
+        {name:"nextDue", label:"下次到期日期", type:"date"},
+        {name:"status", label:"状态", type:"select", options:["未核对","已核对","已停用"], def:"未核对"}
+      ],
+      statusColors:{"未核对":"warn","已核对":"good","已停用":"neutral"},
+      // Same shape as calibrations' extraBadge — purely a visual nudge on
+      // the card itself (and, via overviewActionItems(), on 总览). Nothing
+      // here touches the daily email digest in api/cron/reminders.js: these
+      // records were bulk-imported with nextDue left blank on purpose (see
+      // MAINTENANCE_SEED), so nobody gets an email about them until someone
+      // deliberately fills a due date in. Ask if the daily digest should
+      // also start covering this module once dates are being kept current.
+      extraBadge:function(r){
+        if(!r.nextDue) return null;
+        var due = new Date(r.nextDue+"T00:00:00");
+        if(isNaN(due.getTime())) return null;
+        var today = new Date(); today.setHours(0,0,0,0);
+        var days = Math.round((due-today)/86400000);
+        if(days < 0){
+          var abs = Math.abs(days);
+          return { text: T3("已逾期 "+abs+" 天", "Overdue by "+abs+" day"+(abs===1?"":"s"), "Tertunggak "+abs+" hari"), color:"seal" };
+        }
+        var dueText = T3(days+" 天后到期", "Due in "+days+" day"+(days===1?"":"s"), "Akan tamat tempoh dalam "+days+" hari");
+        if(days <= 14) return { text:dueText, color:"warn" };
+        return { text:dueText, color:"good" };
+      },
+      metaLines:function(r){
+        return [
+          [r.nameCn, r.nameEn].filter(Boolean).join(" / "),
+          r.location ? T("地点：")+r.location : "",
+          r.tasks ? T("检查项目：")+String(r.tasks).split("\n").filter(Boolean).join("；") : "",
+          r.notes ? T("备注：")+r.notes : "",
+          r.nextDue ? T("下次到期：")+r.nextDue : T3("尚未设定到期日","No due date set yet","Tarikh akhir belum ditetapkan")
+        ].filter(Boolean);
+      },
+      emptyText:'暂无设备保养清单，点击"导入参考清单"一次性导入根据扫描件整理的记录，或点击"新建保养项目"单独添加。'
+    },
     calibrations:{
       key:"calibrations", label:"设备校准记录", singular:"校准记录", idPrefix:"CAL", titleField:"equipment",
       badgeField:"type",
@@ -873,7 +1060,7 @@
   var NAV_GROUPS = [
     { label:null, keys:["overview","meetings"] },
     { label:"品管部", keys:["sops","inspections","damages"] },
-    { label:"维修部", keys:["equipment","calibrations","repairs"] },
+    { label:"维修部", keys:["equipment","maintenance","calibrations","repairs"] },
     { label:null, keys:["complaints","traces","vehicles","trackers","leaves","accounts"] }
   ];
   var NAV_ORDER = NAV_GROUPS.reduce(function(acc, g){ return acc.concat(g.keys); }, []);
@@ -896,7 +1083,7 @@
   // Modules an account can be restricted to a subset of — mirrors
   // api/_auth.js's RESTRICTABLE_MODULES. "overview" and "leaves" are
   // never restricted.
-  var RESTRICTABLE_MODULES = ["meetings","sops","inspections","complaints","calibrations","repairs","traces","vehicles","damages","trackers","accounts"];
+  var RESTRICTABLE_MODULES = ["meetings","sops","inspections","complaints","calibrations","repairs","traces","vehicles","damages","trackers","accounts","maintenance"];
   // Modules the top-bar global search looks across — every RESTRICTABLE_MODULES
   // entry except "accounts" (team member accounts aren't record data in
   // STATE, they live in a separate accounts list with its own UI).
@@ -948,15 +1135,15 @@
       // for the matching server-side note), and the WhatsApp-reminder phone
       // lookup still reads it as a fallback (see findStaffContact()).
       meetings:[], sops:[], staff:[], damages:[], trackers:[], repairs:[], vehicles:[],
-      inspections:[], complaints:[], calibrations:[], traces:[],
-      counters:{MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0,VEH:0}
+      inspections:[], complaints:[], calibrations:[], traces:[], maintenance:[],
+      counters:{MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0,VEH:0,PM:0}
     };
   }
   function defaultUI(){
     var now = new Date();
     return {
       view:"overview",
-      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:"",repairs:"",vehicles:"",equipment:""},
+      search:{meetings:"",sops:"",staff:"",damages:"",trackers:"",inspections:"",complaints:"",calibrations:"",traces:"",repairs:"",vehicles:"",equipment:"",maintenance:""},
       modal:null, confirmDelete:null, equipmentPanel:null,
       repairsViewMode:"list",
       calendarCursor:{y:now.getFullYear(), m:now.getMonth()},
@@ -1947,6 +2134,7 @@
   function renderModuleView(moduleKey){
     if(moduleKey === "repairs") return renderRepairsView();
     if(moduleKey === "trackers") return renderTrackersView();
+    if(moduleKey === "maintenance") return renderMaintenanceView();
     var mod = MODULES[moduleKey];
     var list = getFiltered(moduleKey).slice().reverse();
     var wd = writeDisabled();
@@ -1966,6 +2154,48 @@
       + (list.length
           ? '<div class="card-grid">' + list.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
           : '<div class="empty-state">'+esc(T(mod.emptyText))+'</div>');
+  }
+
+  /* --- 设备保养清单: adds a one-click "导入参考清单" button on top of the
+     otherwise-generic module view, so the ~90 records transcribed from the
+     scanned checklist (MAINTENANCE_SEED) don't have to be typed in by hand.
+     Only shown while the module is still empty, to make an accidental
+     double-import unlikely without blocking a deliberate one (see
+     importMaintenanceSeed()'s confirm() below for that second case). ------- */
+  function renderMaintenanceView(){
+    var mod = MODULES.maintenance;
+    var list = getFiltered("maintenance").slice().reverse();
+    var wd = writeDisabled();
+    var modLabel = T(mod.label), modSingular = T(mod.singular);
+    var searchPlaceholder = T3("搜索"+modLabel+"…", "Search "+modLabel+"…", "Cari "+modLabel+"…");
+    var newBtnLabel = T3("+ 新建"+modSingular, "+ New "+modSingular, "+ "+modSingular+" Baharu");
+    var importBtn = (!wd)
+      ? '<button class="btn btn-ghost" onclick="app.importMaintenanceSeed()">'+esc(T3("📋 导入参考清单（"+MAINTENANCE_SEED.length+" 项）","📋 Import reference list ("+MAINTENANCE_SEED.length+" items)","📋 Import senarai rujukan ("+MAINTENANCE_SEED.length+" item)"))+'</button>'
+      : '';
+    return '<div class="view-header">'
+      + '<h2 class="view-title">'+esc(modLabel)+' <span class="view-count num">'+STATE.maintenance.length+'</span></h2>'
+      + '<div class="view-tools">'
+      + '<input id="module-search-input" class="input search-input" type="text" placeholder="'+esc(searchPlaceholder)+'" value="'+esc(UI.search.maintenance||"")+'" oninput="app.setSearch(\'maintenance\', this.value)">'
+      + '<button class="btn btn-ghost" onclick="app.exportModule(\'maintenance\')">'+esc(T("导出全部"))+'</button>'
+      + renderTrashToggle("maintenance")
+      + importBtn
+      + '<button class="btn btn-primary" onclick="app.openModal(\'maintenance\', null)" '+wd+'>'+esc(newBtnLabel)+'</button>'
+      + '</div></div>'
+      + renderTrashPanel("maintenance")
+      + (list.length
+          ? '<div class="card-grid">' + list.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
+          : '<div class="empty-state">'+esc(T(mod.emptyText))+'</div>');
+  }
+
+  function importMaintenanceSeed(){
+    if(writeDisabled()) return;
+    var already = (STATE.maintenance||[]).length;
+    var msg = already
+      ? T3("已经有 "+already+" 条保养记录了，确定要再次导入这份参考清单吗？可能会造成重复记录。","There are already "+already+" maintenance records — import this reference list again? This may create duplicates.","Sudah ada "+already+" rekod penyelenggaraan — import semula senarai ini? Ini mungkin menyebabkan pertindanan.")
+      : T3("即将导入 "+MAINTENANCE_SEED.length+" 条设备保养参考记录（根据你之前上传的检查表整理）。每条状态会标为「未核对」，方便你之后逐条核对设备编号是否准确。确定继续吗？","About to import "+MAINTENANCE_SEED.length+" equipment maintenance reference records (organized from the checklist you uploaded). Each is marked \"unverified\" so you can check the equipment codes individually afterward. Continue?","Akan mengimport "+MAINTENANCE_SEED.length+" rekod rujukan penyelenggaraan peralatan. Setiap rekod ditanda \"belum disahkan\". Teruskan?");
+    if(!window.confirm(msg)) return;
+    var before = deepClone(STATE);
+    saveOp({op:"bulkImport", module:"maintenance", records:MAINTENANCE_SEED}, before);
   }
 
   /* --- 设备维修记录: list / calendar toggle -------------------------------
@@ -2363,6 +2593,7 @@
       {key:"sops", label:T("SOP 文档"), value:(STATE.sops||[]).length},
       {key:"inspections", label:T("检验记录"), value:(STATE.inspections||[]).length},
       {key:"complaints", label:T("客户投诉"), value:(STATE.complaints||[]).length},
+      {key:"maintenance", label:T("设备保养清单"), value:(STATE.maintenance||[]).length},
       {key:"calibrations", label:T("设备校准"), value:(STATE.calibrations||[]).length},
       {key:"repairs", label:T("设备维修"), value:(STATE.repairs||[]).length},
       {key:"traces", label:T("批次追溯"), value:(STATE.traces||[]).length},
@@ -2402,6 +2633,8 @@
     var inspFail = insp.filter(function(x){ return x.result === "不合格"; });
     var cplPending = cpl.filter(function(x){ return x.status !== "已完成"; });
     var rpOpen = rp.filter(function(x){ return x.status !== "已完成"; });
+    var mtn = STATE.maintenance||[];
+    var mtnUnverified = mtn.filter(function(x){ return x.status === "未核对"; });
     var today = new Date(); today.setHours(0,0,0,0);
     var calDue = cal.filter(function(x){
       if(!x.nextDueDate) return false;
@@ -2418,6 +2651,7 @@
       {key:"sops", label:T3("SOP 文档","SOP Documents","Dokumen SOP"), big:s.length, sub: s.length ? statusBreakdown(s,["启用","草稿","停用"]) : T("尚无记录")},
       {key:"inspections", label:T("检验记录"), big: inspFail.length, sub: T3("共 "+insp.length+" 条 · 不合格 "+inspFail.length, insp.length+" total · "+inspFail.length+" failed", insp.length+" jumlah · "+inspFail.length+" gagal"), highlight: inspFail.length>0},
       {key:"complaints", label:T("客户投诉"), big: cplPending.length, sub: T3("共 "+cpl.length+" 条 · 待处理 "+cplPending.length, cpl.length+" total · "+cplPending.length+" pending", cpl.length+" jumlah · "+cplPending.length+" belum selesai"), highlight: cplPending.length>0},
+      {key:"maintenance", label:T3("设备保养清单","Maintenance Checklist","Senarai Penyelenggaraan"), big: mtnUnverified.length, sub: T3("共 "+mtn.length+" 条 · 待核对 "+mtnUnverified.length, mtn.length+" total · "+mtnUnverified.length+" to verify", mtn.length+" jumlah · "+mtnUnverified.length+" perlu disahkan"), highlight: mtnUnverified.length>0},
       {key:"calibrations", label:T("设备校准"), big: calDue.length, sub: T3("共 "+cal.length+" 条 · 即将/已到期 "+calDue.length, cal.length+" total · "+calDue.length+" due soon/overdue", cal.length+" jumlah · "+calDue.length+" akan/telah tamat tempoh"), highlight: calDue.length>0},
       {key:"repairs", label:T("设备维修"), big: rpOpen.length, sub: T3("共 "+rp.length+" 条 · 未完成 "+rpOpen.length, rp.length+" total · "+rpOpen.length+" open", rp.length+" jumlah · "+rpOpen.length+" belum selesai"), highlight: rpOpen.length>0},
       {key:"traces", label:T("批次追溯"), big: trc.length, sub: T3("共 "+trc.length+" 条记录", trc.length+" records", trc.length+" rekod")},
@@ -2462,6 +2696,18 @@
           ? T3("已逾期 "+Math.abs(days)+" 天","Overdue by "+Math.abs(days)+" day"+(Math.abs(days)===1?"":"s"),"Tertunggak "+Math.abs(days)+" hari")
           : (days === 0 ? T3("今天到期","Due today","Tamat tempoh hari ini") : T3(days+" 天后到期","Due in "+days+" day"+(days===1?"":"s"),"Tamat tempoh dalam "+days+" hari"));
         items.push({ module:"calibrations", id:r.id, moduleLabel:T("设备校准"), title:r.equipment||r.id,
+          severity: days < 0 ? "seal" : "warn", sub:sub,
+          sortKey: days < 0 ? -1000-Math.abs(days) : days });
+      });
+    }
+    if(isModuleAllowed("maintenance")){
+      (STATE.maintenance||[]).forEach(function(r){
+        var days = daysUntil(r.nextDue);
+        if(days == null || days > 14) return;
+        var sub = days < 0
+          ? T3("已逾期 "+Math.abs(days)+" 天","Overdue by "+Math.abs(days)+" day"+(Math.abs(days)===1?"":"s"),"Tertunggak "+Math.abs(days)+" hari")
+          : (days === 0 ? T3("今天到期","Due today","Tamat tempoh hari ini") : T3(days+" 天后到期","Due in "+days+" day"+(days===1?"":"s"),"Tamat tempoh dalam "+days+" hari"));
+        items.push({ module:"maintenance", id:r.id, moduleLabel:T3("设备保养清单","Maintenance Checklist","Senarai Penyelenggaraan"), title:r.equipCode||r.id,
           severity: days < 0 ? "seal" : "warn", sub:sub,
           sortKey: days < 0 ? -1000-Math.abs(days) : days });
       });
@@ -2646,7 +2892,7 @@
   }
 
   function exportFullBackup(){
-    var modules = ["meetings","sops","staff","damages","trackers","repairs","vehicles","inspections","complaints","calibrations","traces"];
+    var modules = ["meetings","sops","staff","damages","trackers","repairs","vehicles","inspections","complaints","calibrations","traces","maintenance"];
     var payload = {
       exportedAt: new Date().toISOString(),
       exportedBy: (CURRENT_USER && CURRENT_USER.name) || "",
@@ -3278,10 +3524,10 @@
     // The badge counts (STATE.trashCounts) are cheap and come back on
     // every fetch, so those stay fully populated regardless.
     STATE = state;
-    if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0,VEH:0};
+    if(!STATE.counters) STATE.counters = {MTG:0,SOP:0,STF:0,DMG:0,TRK:0,INS:0,CPL:0,CAL:0,TRC:0,RPR:0,VEH:0,PM:0};
     if(!STATE.trashCounts) STATE.trashCounts = {};
     if(!STATE.trash) STATE.trash = {};
-    ["meetings","sops","staff","damages","trackers","repairs","vehicles","inspections","complaints","calibrations","traces"].forEach(function(k){
+    ["meetings","sops","staff","damages","trackers","repairs","vehicles","inspections","complaints","calibrations","traces","maintenance"].forEach(function(k){
       if(!STATE[k]) STATE[k] = [];
       if(STATE.trashCounts[k] == null) STATE.trashCounts[k] = 0;
     });
@@ -3563,6 +3809,7 @@
     createTrackerFromFlag: createTrackerFromFlag, createTrackerFromRepair: createTrackerFromRepair,
     openEquipmentPanel: openEquipmentPanel, closeEquipmentPanel: closeEquipmentPanel,
     jumpToActionItem: jumpToActionItem, exportFullBackup: exportFullBackup,
+    importMaintenanceSeed: importMaintenanceSeed,
     addReportItem: addReportItem, removeReportItem: removeReportItem, syncReportItems: syncReportItems,
     addTeammate: addTeammate, removeTeammate: removeTeammate,
     togglePermEdit: togglePermEdit, savePermissions: savePermissions,
