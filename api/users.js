@@ -40,6 +40,7 @@ module.exports = async function handler(req, res) {
           name: u.name,
           username: u.username,
           phone: u.phone || "",
+          email: u.email || "",
           createdAt: u.createdAt,
           allowedModules: Array.isArray(u.allowedModules) ? u.allowedModules : null,
         };
@@ -75,6 +76,7 @@ module.exports = async function handler(req, res) {
         }
         var allowedModules = sanitizeAllowedModules(body.allowedModules);
         var phone = String(body.phone || "").trim().slice(0, 40);
+        var email = String(body.email || "").trim().slice(0, 120);
         var passwordHash = auth.hashPassword(password);
         try {
           await db.kvUpdate(auth.USERS_KEY, function (raw) {
@@ -92,6 +94,7 @@ module.exports = async function handler(req, res) {
               passwordHash: passwordHash,
               allowedModules: allowedModules,
               phone: phone,
+              email: email,
               createdAt: new Date().toISOString(),
             });
             return { value: users };
@@ -119,6 +122,9 @@ module.exports = async function handler(req, res) {
         var patch = { allowedModules: nextAllowed };
         if (Object.prototype.hasOwnProperty.call(body, "phone")) {
           patch.phone = String(body.phone || "").trim().slice(0, 40);
+        }
+        if (Object.prototype.hasOwnProperty.call(body, "email")) {
+          patch.email = String(body.email || "").trim().slice(0, 120);
         }
         var permResult = await db.kvUpdate(auth.USERS_KEY, function (raw) {
           var users = Array.isArray(raw) ? raw.slice() : [];

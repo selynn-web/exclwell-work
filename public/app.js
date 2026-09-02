@@ -838,15 +838,19 @@
     complaints:{
       key:"complaints", label:"客户投诉记录", singular:"投诉记录", idPrefix:"CPL", titleField:"customer",
       badgeField:"severity",
+      attachmentField:"photo",
       fields:[
         {name:"customer", label:"客户名称", type:"text", required:true},
         {name:"product", label:"产品 / 批号", type:"text"},
         {name:"date", label:"投诉日期", type:"date", required:true},
         {name:"channel", label:"投诉渠道", type:"select", options:["电话","微信 / 邮件","现场","其他"], def:"电话"},
         {name:"description", label:"投诉内容", type:"textarea", full:true, required:true},
+        {name:"photo", type:"hidden"},
+        {type:"file", label:"相关照片（投诉产品/包装等，可拍照，最大 4MB）", targetField:"photo", accept:"image/*", capture:"environment", full:true},
         {name:"severity", label:"严重程度", type:"select", options:["轻微","一般","严重"], def:"一般"},
         {name:"owner", label:"负责人", type:"text"},
         {name:"handling", label:"处理措施", type:"textarea", full:true},
+        {name:"resolution", label:"解决方案 / 结果说明", type:"textarea", full:true, placeholder:"最终怎么处理、给客户的答复或赔偿方式、问题是否已解决"},
         {name:"status", label:"处理状态", type:"select", options:["待处理","处理中","已完成"], def:"待处理"}
       ],
       statusColors:{"待处理":"warn","处理中":"accent","已完成":"good"},
@@ -855,7 +859,8 @@
           [r.date, T(r.channel)].filter(Boolean).join(" · "),
           r.product ? T("产品：") +r.product : "",
           r.description || "",
-          r.handling ? T("处理：")+r.handling : ""
+          r.handling ? T("处理：")+r.handling : "",
+          r.resolution ? T("解决方案：")+r.resolution : ""
         ].filter(Boolean);
       },
       emptyText:'暂无客户投诉记录，点击"新建投诉记录"登记。'
@@ -2184,7 +2189,14 @@
       + renderTrashPanel("maintenance")
       + (list.length
           ? '<div class="card-grid">' + list.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
-          : '<div class="empty-state">'+esc(T(mod.emptyText))+'</div>');
+          // Empty state repeats the import button front-and-center (not just
+          // as a small toolbar button next to search/export/trash, which is
+          // easy to miss the first time this module is opened) — this is
+          // the one path someone opening a freshly-deployed 设备保养清单 for
+          // the very first time is actually looking for.
+          : '<div class="empty-state">'+esc(T(mod.emptyText))
+            + (!wd ? '<div style="margin-top:14px;"><button class="btn btn-primary" onclick="app.importMaintenanceSeed()">'+esc(T3("📋 导入参考清单（"+MAINTENANCE_SEED.length+" 项）","📋 Import reference list ("+MAINTENANCE_SEED.length+" items)","📋 Import senarai rujukan ("+MAINTENANCE_SEED.length+" item)"))+'</button></div>' : '')
+            + '</div>');
   }
 
   function importMaintenanceSeed(){
@@ -2824,6 +2836,7 @@
         var editPanel = editing
           ? '<form class="perm-edit-form" onsubmit="app.savePermissions(event,\''+u.id+'\')">'
             + '<input class="input" type="text" name="perm_phone" placeholder="'+esc(T("手机号码（可选，用于 WhatsApp 提醒）"))+'" value="'+esc(u.phone||"")+'" style="margin-bottom:10px;">'
+            + '<input class="input" type="email" name="perm_email" placeholder="'+esc(T("个人邮箱（可选）"))+'" value="'+esc(u.email||"")+'" style="margin-bottom:10px;">'
             + renderModuleCheckboxes("perm_", u.allowedModules)
             + '<p class="external-desc" style="margin:8px 0;">'+esc(T("一个都不勾 = 不限制，可看到全部模块。"))+'</p>'
             + '<div class="card-actions">'
@@ -2834,7 +2847,7 @@
         return '<div class="card">'
           + '<div class="card-top"><span class="card-id num">@'+esc(u.username)+'</span>'+(isMe?'<span class="chip chip-accent">'+esc(T("我"))+'</span>':'')+'</div>'
           + '<h3 class="card-title">'+esc(u.name)+'</h3>'
-          + '<div class="card-meta"><p>'+(u.createdAt?(esc(T("加入时间："))+esc(u.createdAt.slice(0,10))):"")+'</p><p>'+esc(permSummary)+'</p>'+(u.phone?('<p>'+esc(T("手机号码："))+esc(u.phone)+'</p>'):'')+'</div>'
+          + '<div class="card-meta"><p>'+(u.createdAt?(esc(T("加入时间："))+esc(u.createdAt.slice(0,10))):"")+'</p><p>'+esc(permSummary)+'</p>'+(u.phone?('<p>'+esc(T("手机号码："))+esc(u.phone)+'</p>'):'')+(u.email?('<p>'+esc(T("邮箱："))+esc(u.email)+'</p>'):'')+'</div>'
           + (editing ? editPanel : (
               '<div class="card-actions">'
               + '<button class="btn btn-ghost btn-sm" onclick="app.togglePermEdit(\''+u.id+'\')" '+wd+'>'+esc(T("编辑权限"))+'</button>'
@@ -2854,6 +2867,7 @@
       + '<input class="input" type="text" name="username" placeholder="'+esc(T("用户名"))+'">'
       + '<input class="input" type="password" name="password" placeholder="'+esc(T("初始密码（至少 4 位）"))+'" autocomplete="new-password">'
       + '<input class="input" type="text" name="phone" placeholder="'+esc(T("手机号码（可选，用于 WhatsApp 提醒）"))+'" autocomplete="tel">'
+      + '<input class="input" type="email" name="email" placeholder="'+esc(T("个人邮箱（可选）"))+'" autocomplete="email">'
       + '<p class="external-desc" style="margin:10px 0 4px;">'+esc(T("限制这个人只能看到（不勾选 = 不限制，全部可见）："))+'</p>'
       + renderModuleCheckboxes("new_", [])
       + '<button type="submit" class="btn btn-primary" '+wd+'>'+esc(T("添加"))+'</button>'
@@ -2984,6 +2998,7 @@
       username: form.elements["username"].value,
       password: form.elements["password"].value,
       phone: form.elements["phone"].value,
+      email: form.elements["email"].value,
       allowedModules: collectCheckedModules(form, "new_")
     };
     var btn = form.querySelector('button[type="submit"]');
@@ -3035,12 +3050,13 @@
     var form = e.target;
     var allowedModules = collectCheckedModules(form, "perm_");
     var phone = form.elements["perm_phone"] ? form.elements["perm_phone"].value : undefined;
+    var email = form.elements["perm_email"] ? form.elements["perm_email"].value : undefined;
     var btn = form.querySelector('button[type="submit"]');
     if(btn) btn.disabled = true;
     fetch("/api/users", {
       method:"POST",
       headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({op:"setPermissions", id:id, allowedModules:allowedModules, phone:phone})
+      body: JSON.stringify({op:"setPermissions", id:id, allowedModules:allowedModules, phone:phone, email:email})
     }).then(function(res){
       if(res.status === 401){ showLogin("登录已过期，请重新输入密码。"); throw new Error("__unauthorized__"); }
       return res.json().catch(function(){ return {}; }).then(function(json){
