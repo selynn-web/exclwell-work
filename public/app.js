@@ -1154,6 +1154,7 @@
       calendarCursor:{y:now.getFullYear(), m:now.getMonth()},
       calendarSelectedDate:null,
       trackersViewMode:"list",
+      trackersDoneOpen:false,
       ganttZoom:"week",
       trashOpen:{},
       globalSearch:""
@@ -2360,9 +2361,44 @@
       + '</div></div>' + renderTrashPanel("trackers");
     if(mode === "gantt") return header + renderFlaggedPanel() + renderTrackersGantt();
     var list = getFiltered("trackers").slice().reverse();
-    return header + renderFlaggedPanel() + (list.length
-      ? '<div class="card-grid">' + list.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
-      : '<div class="empty-state">'+esc(T(mod.emptyText))+'</div>');
+    // 已完成的追踪事项单独变成一份轻量的列表（跟回收站那种一行一条的样式一样），
+    // 不再跟"还要处理"的事项一起占用同样大的卡片——活跃的事项才需要那么显眼，
+    // 已完成的只是留个记录、随时能点开看，默认收起以免把页面拉得很长。
+    var activeList = list.filter(function(r){ return r.status !== "已完成"; });
+    var doneList = list.filter(function(r){ return r.status === "已完成"; });
+    var activeHtml = activeList.length
+      ? '<div class="card-grid">' + activeList.map(function(r){ return renderCard(mod, r); }).join("") + '</div>'
+      : (doneList.length ? '' : '<div class="empty-state">'+esc(T(mod.emptyText))+'</div>');
+    return header + renderFlaggedPanel() + activeHtml + renderTrackersDonePanel(doneList);
+  }
+
+  function renderTrackersDonePanel(doneList){
+    if(!doneList.length) return "";
+    var wd = writeDisabled();
+    var open = !!UI.trackersDoneOpen;
+    var titleText = (open ? "▾ " : "▸ ") + T3("已完成 ("+doneList.length+")", "Completed ("+doneList.length+")", "Selesai ("+doneList.length+")");
+    var rows = doneList.map(function(r){
+      var meta = [r.department ? T(r.department) : "", r.owner ? T("负责人：")+r.owner : "", r.dueDate ? T("预计完成：")+r.dueDate : ""].filter(Boolean).join(" · ");
+      return '<div class="trash-row">'
+        + '<div class="trash-row-main">'
+          + '<span class="card-id num">'+esc(r.id)+'</span>'
+          + '<span class="trash-row-title">'+esc(r.issue||r.id)+'</span>'
+          + (meta ? '<span class="trash-row-meta">'+esc(meta)+'</span>' : '')
+        + '</div>'
+        + '<div class="trash-row-actions">'
+          + '<button type="button" class="btn btn-ghost btn-sm" onclick="app.openModal(\'trackers\',\''+r.id+'\')" '+wd+'>'+esc(T("编辑"))+'</button>'
+          + '<button type="button" class="btn btn-danger btn-sm" onclick="app.requestDelete(\'trackers\',\''+r.id+'\')" '+wd+'>'+esc(T("删除"))+'</button>'
+        + '</div></div>';
+    }).join("");
+    return '<div class="panel trash-panel" style="margin-top:14px;">'
+      + '<h3 class="panel-title" style="cursor:pointer; user-select:none;" onclick="app.toggleTrackersDone()">'+esc(titleText)+'</h3>'
+      + (open ? ('<div class="trash-list">'+rows+'</div>') : '')
+      + '</div>';
+  }
+
+  function toggleTrackersDone(){
+    UI.trackersDoneOpen = !UI.trackersDoneOpen;
+    render();
   }
 
   function renderTrackersGantt(){
@@ -3833,7 +3869,8 @@
     exportRecord: exportRecord, exportModule: exportModule,
     sendWhatsAppReminder: sendWhatsAppReminder,
     setRepairsViewMode: setRepairsViewMode, calendarNav: calendarNav, selectCalendarDate: selectCalendarDate,
-    setTrackersViewMode: setTrackersViewMode, setGanttZoom: setGanttZoom, ganttScrollToday: ganttScrollToday
+    setTrackersViewMode: setTrackersViewMode, setGanttZoom: setGanttZoom, ganttScrollToday: ganttScrollToday,
+    toggleTrackersDone: toggleTrackersDone
   };
 
   if(document.readyState === "loading"){
